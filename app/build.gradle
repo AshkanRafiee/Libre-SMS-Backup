@@ -1,0 +1,59 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace = 'com.ashkanrafiee.libresmsbackup'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId 'com.ashkanrafiee.libresmsbackup'
+        minSdk 26
+        targetSdk 36
+        // versionCode = major * 10000 + minor * 1000 + patch
+        versionCode 10000
+        versionName '1.0.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    buildFeatures { buildConfig true }
+    lint { checkReleaseBuilds false; abortOnError false }
+
+    dependenciesInfo { includeInApk = false; includeInBundle = false }
+
+    def signingFile = rootProject.file('signing.properties')
+    def signingValues = new Properties()
+    if (signingFile.exists()) signingFile.withInputStream { signingValues.load(it) }
+    signingConfigs {
+        release {
+            if (signingValues['storeFile']) {
+                storeFile rootProject.file(signingValues['storeFile'])
+                if (signingValues['storeType']) storeType signingValues['storeType']
+                storePassword signingValues['storePassword']
+                keyAlias signingValues['keyAlias']
+                keyPassword signingValues['keyPassword']
+                enableV1Signing false
+                enableV3Signing true
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (signingValues['storeFile']) signingConfig signingConfigs.release
+            minifyEnabled false
+            vcsInfo { include = false }
+        }
+    }
+
+    testOptions { managedDevices { localDevices { "pixel_6" { apiLevel = 36 } } } }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    javaCompiler.set(javaToolchains.compilerFor {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    })
+}
+
+dependencies {
+    // Test-only infrastructure; the shipped application has no third-party runtime dependencies.
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+}

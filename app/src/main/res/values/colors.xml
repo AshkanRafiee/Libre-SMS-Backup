@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#F1F5F9</color>
+    <color name="status_bar">#F1F5F9</color>
+    <color name="nav_bar">#F1F5F9</color>
+    <color name="panel">#FFFFFF</color>
+    <color name="text_primary">#1E293B</color>
+    <color name="muted">#64748B</color>
+    <color name="text_tertiary">#64748B</color>
+    <color name="link">#6D28D9</color>
+    <color name="amber">#A16207</color>
+    <color name="good">#15803D</color>
+    <color name="warning_bg">#FEF3C7</color>
+    <color name="warning_ink">#92400E</color>
+    <color name="button_surface">#E7ECF3</color>
+    <color name="button_surface_pressed">#D7DEE9</color>
+    <color name="button_text">#1E293B</color>
+    <color name="accent">#8FF0D0</color>
+    <color name="accent_pressed">#74D9B8</color>
+    <color name="accent_ink">#0A0E18</color>
+    <color name="hero_grad_start">#C7D2FE</color>
+    <color name="hero_grad_end">#E4DCF6</color>
+    <color name="subtitle">#475569</color>
+    <color name="sms_blue">#4F7CFF</color>
+    <color name="call_orange">#D97706</color>
+</resources>

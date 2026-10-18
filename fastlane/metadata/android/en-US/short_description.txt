@@ -1,0 +1,1 @@
+Private backups of SMS, MMS, and call logs with optional encryption.

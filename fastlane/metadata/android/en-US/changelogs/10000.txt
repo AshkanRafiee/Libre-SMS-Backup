@@ -1,0 +1,1 @@
+Initial release: back up SMS, MMS, and call records locally with optional encryption, scheduled backups, and duplicate-aware restore.

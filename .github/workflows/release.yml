@@ -1,0 +1,67 @@
+name: Release Android APK and AAB
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Set up Java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+      - name: Restore production signing files
+        env:
+          KEYSTORE_BASE64: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.LIBRESMSBACKUP_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.LIBRESMSBACKUP_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          test -n "$KEYSTORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/libresmsbackup-release.p12
+          cat > signing.properties <<EOF
+          storeFile=app/libresmsbackup-release.p12
+          storeType=PKCS12
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+      - name: Build signed release artifacts
+        run: bash ./gradlew clean assembleRelease bundleRelease
+      - name: Create checksums
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          APK_NAME="Libre-SMS-Backup-${TAG_NAME}.apk"
+          AAB_NAME="Libre-SMS-Backup-${TAG_NAME}.aab"
+          cp app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+          cp app/build/outputs/bundle/release/app-release.aab "$AAB_NAME"
+          sha256sum "$APK_NAME" "$AAB_NAME" > "Libre-SMS-Backup-${TAG_NAME}-SHA256SUMS"
+      - name: Publish GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG_NAME" \
+            "Libre-SMS-Backup-${TAG_NAME}.apk" \
+            "Libre-SMS-Backup-${TAG_NAME}.aab" \
+            "Libre-SMS-Backup-${TAG_NAME}-SHA256SUMS"
