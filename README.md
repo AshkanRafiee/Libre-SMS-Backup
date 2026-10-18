@@ -28,7 +28,3 @@ Run the format tests with the project’s Android test runner. Tests should use 
 ## Privacy boundary
 
 SMS, MMS, contacts, and call-log permissions expose extremely sensitive data. Libre SMS Backup processes that data locally and does not request `INTERNET`, upload it, or log message bodies, phone numbers, contacts, or call details. A chosen Storage Access Framework destination may itself be cloud-backed; its syncing and retention are controlled by that provider. Read the [privacy policy](PRIVACY.md) for the full boundary.
-
-## Contributing and releases
-
-See [`docs/RELEASING.md`](docs/RELEASING.md) for signed GitHub releases and the future F-Droid submission.
