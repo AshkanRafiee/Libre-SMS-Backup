@@ -31,8 +31,7 @@ text. The project cannot recover a forgotten password or encrypted archive.
 Android may require Libre SMS Backup to be the default SMS app temporarily for
 restricted-message backups or SMS restore. The app explains this transition
 and guides you back to your preferred SMS app. While the app temporarily holds
-that role, incoming MMS delivery is not handled by Libre SMS Backup; avoid
-receiving new MMS during that operation.
+that role, incoming MMS delivery is not handled by Libre SMS Backup.
 
 ## Retention and deletion
 
