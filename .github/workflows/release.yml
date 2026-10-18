@@ -10,22 +10,23 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.release.tag_name }}
       - name: Set up Java
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '17'
       - name: Set up Android SDK
-        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - name: Restore production signing files
         env:
           KEYSTORE_BASE64: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_BASE64 }}
@@ -33,6 +34,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.LIBRESMSBACKUP_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.LIBRESMSBACKUP_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          umask 077
           test -n "$KEYSTORE_BASE64"
           test -n "$KEYSTORE_PASSWORD"
           test -n "$KEY_ALIAS"
@@ -45,6 +48,8 @@ jobs:
           keyAlias=$KEY_ALIAS
           keyPassword=$KEY_PASSWORD
           EOF
+          keytool -list -keystore app/libresmsbackup-release.p12 \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
       - name: Build signed release artifacts
         run: bash ./gradlew clean assembleRelease bundleRelease
       - name: Create checksums
@@ -65,3 +70,6 @@ jobs:
             "Libre-SMS-Backup-${TAG_NAME}.apk" \
             "Libre-SMS-Backup-${TAG_NAME}.aab" \
             "Libre-SMS-Backup-${TAG_NAME}-SHA256SUMS"
+      - name: Remove signing material
+        if: always()
+        run: rm -f signing.properties app/libresmsbackup-release.p12

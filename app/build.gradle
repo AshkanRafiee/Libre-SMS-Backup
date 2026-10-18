@@ -32,6 +32,7 @@ android {
                 keyAlias signingValues['keyAlias']
                 keyPassword signingValues['keyPassword']
                 enableV1Signing false
+                enableV2Signing true
                 enableV3Signing true
             }
         }
