@@ -1392,7 +1392,6 @@ public class MainActivity extends Activity {
     private String[] restoreReadPermissions(boolean restoreSms, boolean restoreCalls) {
         List<String> permissions = new ArrayList<>();
         if (restoreSms) permissions.add(Manifest.permission.READ_SMS);
-        if (restoreSms) permissions.add(Manifest.permission.READ_CONTACTS);
         if (restoreCalls) permissions.add(Manifest.permission.READ_CALL_LOG);
         return permissions.toArray(new String[0]);
     }

@@ -6,7 +6,6 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.CallLog;
-import android.provider.ContactsContract;
 import android.provider.Telephony;
 import android.util.JsonReader;
 import android.util.JsonToken;
@@ -86,7 +85,6 @@ public final class RestoreEngine {
         Set<String> existingCalls = includeCalls
                 ? existingKeys(resolver, CallLog.Calls.CONTENT_URI, CALL_KEY_COLUMNS) : null;
         if (preview == null) preview = inspect(plaintext);
-        Map<String, Long> contactPersonIds = new HashMap<>();
         Map<String, Long> threadIds = new HashMap<>();
         int total = (includeSms ? preview.smsCount : 0) + (includeCalls ? preview.callsCount : 0)
                 + (includeMms ? preview.mmsCount : 0) + (includeRcs ? preview.rcsCount : 0);
@@ -109,18 +107,18 @@ public final class RestoreEngine {
                 String name = reader.nextName();
                 if ("sms".equals(name)) {
                     if (includeSms) restoreArray(reader, resolver, Telephony.Sms.CONTENT_URI, true, existingSms, result,
-                            contactPersonIds, threadIds, listener, completed, total);
+                            threadIds, listener, completed, total);
                     else reader.skipValue();
                 } else if ("calls".equals(name)) {
                     if (includeCalls) restoreArray(reader, resolver, CallLog.Calls.CONTENT_URI, false, existingCalls, result,
-                            null, null, listener, completed, total);
+                            null, listener, completed, total);
                     else reader.skipValue();
                 } else if ("mms".equals(name)) {
                     if (includeMms) restoreMmsSection(reader, resolver, existingMms, result, mmsProviderAvailable,
                             listener, completed, total);
                     else reader.skipValue();
                 } else if ("rcs".equals(name)) {
-                    if (includeRcs) restoreRcsSection(reader, resolver, existingSms, result, contactPersonIds,
+                    if (includeRcs) restoreRcsSection(reader, resolver, existingSms, result,
                             threadIds, listener, completed, total);
                     else reader.skipValue();
                 } else {
@@ -157,7 +155,7 @@ public final class RestoreEngine {
 
     private static void restoreArray(JsonReader reader, ContentResolver resolver, Uri uri,
             boolean sms, Set<String> existing, RestoreSummary result,
-            Map<String, Long> contactPersonIds, Map<String, Long> threadIds,
+            Map<String, Long> threadIds,
             ProgressListener listener, int[] completed, int total) throws IOException {
         reader.beginArray();
         while (reader.hasNext()) {
@@ -170,7 +168,6 @@ public final class RestoreEngine {
             }
             try {
                 if (sms) {
-                    attachContactPerson(resolver, values, contactPersonIds);
                     attachThreadId(resolver, values, threadIds);
                 }
                 Uri inserted = resolver.insert(uri, values);
@@ -281,24 +278,6 @@ public final class RestoreEngine {
         if (!from.containsKey(key)) return;
         if (from.get(key) instanceof String) to.put(key, from.getAsString(key));
         else to.put(key, from.getAsLong(key));
-    }
-
-    private static void attachContactPerson(ContentResolver resolver, ContentValues values,
-            Map<String, Long> contactPersonIds) {
-        String address = values.getAsString("address");
-        if (address == null || address.isEmpty() || values.containsKey("person")) return;
-        if (contactPersonIds.containsKey(address)) {
-            Long personId = contactPersonIds.get(address);
-            if (personId != null) values.put("person", personId);
-            return;
-        }
-        Uri lookup = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(address));
-        Long personId = null;
-        try (Cursor cursor = resolver.query(lookup, new String[]{ContactsContract.PhoneLookup._ID}, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) personId = cursor.getLong(0);
-        } catch (Exception ignored) { }
-        contactPersonIds.put(address, personId);
-        if (personId != null) values.put("person", personId);
     }
 
     private static void attachThreadId(ContentResolver resolver, ContentValues values,
@@ -433,7 +412,7 @@ public final class RestoreEngine {
 
     private static void restoreRcsSection(JsonReader reader, ContentResolver resolver,
             Set<String> existingSms, RestoreSummary result,
-            Map<String, Long> contactPersonIds, Map<String, Long> threadIds,
+            Map<String, Long> threadIds,
             ProgressListener listener, int[] completed, int total) throws IOException {
         reader.beginObject();
         while (reader.hasNext()) {
@@ -463,7 +442,6 @@ public final class RestoreEngine {
                     sms.put("read", row.getAsInteger("read") == null ? 1 : row.getAsInteger("read"));
                     sms.put("seen", row.getAsInteger("seen") == null ? 1 : row.getAsInteger("seen"));
                     sms.put("type", row.getAsInteger("type") == null ? Telephony.Sms.MESSAGE_TYPE_INBOX : row.getAsInteger("type"));
-                    attachContactPerson(resolver, sms, contactPersonIds);
                     attachThreadId(resolver, sms, threadIds);
                     String key = keyFor(sms, true);
                     if (existingSms.contains(key)) { result.duplicates++; continue; }

@@ -9,10 +9,21 @@ The app does not request the Android `INTERNET` permission.
 ## Data handled on the device
 
 When you start a manual or scheduled backup, or a restore, Android may grant the app access to the
-SMS, MMS, contacts, and call-log providers needed for the operation. The app
+SMS, MMS, and call-log providers needed for the operation. The app
 uses that data on the device to create or restore the archive you selected. It
 does not send message bodies, phone numbers, contacts, call records, passwords,
 or archive contents to the project or any third party.
+
+## Issue reports
+
+From the About screen, you may create an issue report. Before sharing, the app
+asks whether to include an optional local diagnostic attachment. That attachment
+contains only an allow-listed app version, Android version, language, feature
+state, and sanitized error state. It contains no messages, phone numbers,
+contacts, passwords, archives, storage paths, or device identifiers. You can
+also choose to share only the report template without diagnostics. Nothing is
+sent automatically; the email or sharing app you choose controls what leaves
+the device, including any text you add.
 
 You choose the backup destination through Android's Storage Access Framework.
 That destination may be local storage or a cloud-backed document provider. Any

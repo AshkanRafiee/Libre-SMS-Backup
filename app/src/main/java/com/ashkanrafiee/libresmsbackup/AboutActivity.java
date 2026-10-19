@@ -1,6 +1,8 @@
 package com.ashkanrafiee.libresmsbackup;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -14,13 +16,17 @@ import android.view.WindowInsets;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.File;
 
 /** Transparent project information and privacy page. */
 public class AboutActivity extends Activity {
     private static final String WEBSITE = "https://libresmsbackup.ashkanrafiee.com/";
     private static final String SOURCE = "https://github.com/AshkanRafiee/Libre-SMS-Backup";
     private static final String ISSUES = SOURCE + "/issues";
-    private static final String CONTACT = "mailto:libresmsbackup.eject095@passmail.net";
+    private static final String CONTACT_EMAIL = "libresmsbackup.eject095@passmail.net";
+    private static final String CONTACT = "mailto:" + CONTACT_EMAIL;
     private static final String PRIVACY = SOURCE + "/blob/main/PRIVACY.md";
     private static final String DONATION = WEBSITE + "#donate";
 
@@ -67,9 +73,10 @@ public class AboutActivity extends Activity {
         body.addView(info(getString(R.string.about_created_by_label), "Ashkan Rafiee", v -> open("https://ashkanrafiee.com")), margins(0, 0, 0, 6));
         body.addView(info(getString(R.string.about_license_label), "GNU General Public License v3.0", v -> open(SOURCE + "/blob/main/LICENSE")), margins(0, 0, 0, 6));
         body.addView(info(getString(R.string.about_source_label), "github.com/AshkanRafiee/Libre-SMS-Backup", v -> open(SOURCE)), margins(0, 0, 0, 6));
-        body.addView(info(getString(R.string.about_website_label), "libresmsbackup.ashkanrafiee.com", v -> open(WEBSITE)), margins(0, 0, 0, 6));
-        body.addView(info(getString(R.string.about_suggestions_label), "github.com/AshkanRafiee/Libre-SMS-Backup/issues", v -> open(ISSUES)), margins(0, 0, 0, 6));
-        body.addView(info(getString(R.string.about_contact_label), "libresmsbackup.eject095@passmail.net", v -> open(CONTACT)), margins(0, 0, 0, 6));
+         body.addView(info(getString(R.string.about_website_label), "libresmsbackup.ashkanrafiee.com", v -> open(WEBSITE)), margins(0, 0, 0, 6));
+         body.addView(info(getString(R.string.about_suggestions_label), "github.com/AshkanRafiee/Libre-SMS-Backup/issues", v -> open(ISSUES)), margins(0, 0, 0, 6));
+         body.addView(info(getString(R.string.about_report_issue_label), getString(R.string.about_report_issue_value), v -> showReportDialog()), margins(0, 0, 0, 6));
+         body.addView(info(getString(R.string.about_contact_label), "libresmsbackup.eject095@passmail.net", v -> open(CONTACT)), margins(0, 0, 0, 6));
         body.addView(info(getString(R.string.about_privacy_label), "github.com/AshkanRafiee/Libre-SMS-Backup/PRIVACY.md", v -> open(PRIVACY)), margins(0, 0, 0, 6));
         body.addView(info(getString(R.string.about_donate_label), "libresmsbackup.ashkanrafiee.com/#donate", v -> open(DONATION)), margins(0, 0, 0, 14));
         TextView footer = text(getString(R.string.about_footer, BuildConfig.VERSION_NAME), 11, color(R.color.text_tertiary)); footer.setGravity(Gravity.CENTER); body.addView(footer);
@@ -88,4 +95,43 @@ public class AboutActivity extends Activity {
     private GradientDrawable rounded(int fill, float radius) { GradientDrawable drawable = new GradientDrawable(); drawable.setColor(fill); drawable.setCornerRadius(dp(radius)); return drawable; }
     private LinearLayout.LayoutParams margins(int left, int top, int right, int bottom) { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.setMargins(dp(left), dp(top), dp(right), dp(bottom)); return p; }
     private void open(String url) { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception ignored) { android.widget.Toast.makeText(this, getString(R.string.about_no_browser), android.widget.Toast.LENGTH_SHORT).show(); } }
+
+    private void showReportDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.report_issue_title))
+                .setMessage(getString(R.string.report_issue_consent_message))
+                .setNegativeButton(getString(R.string.action_cancel), null)
+                .setNeutralButton(getString(R.string.report_issue_without_diagnostics), (dialog, which) -> shareReport(false))
+                .setPositiveButton(getString(R.string.report_issue_with_diagnostics), (dialog, which) -> shareReport(true))
+                .show();
+    }
+
+    private void shareReport(boolean includeDiagnostics) {
+        Uri attachment = null;
+        try {
+            if (includeDiagnostics) {
+                File report = ReportDiagnostics.create(this);
+                attachment = ReportFileProvider.uriFor(report, getPackageName() + ".report-files");
+            }
+            Intent share = new Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_EMAIL, new String[]{CONTACT_EMAIL})
+                    .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.report_issue_subject))
+                    .putExtra(Intent.EXTRA_TEXT, getString(R.string.report_issue_body));
+            if (attachment != null) {
+                share.putExtra(Intent.EXTRA_STREAM, attachment)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        .setClipData(ClipData.newRawUri(getString(R.string.report_issue_attachment_label), attachment));
+            }
+            startActivity(Intent.createChooser(share, getString(R.string.report_issue_share_title)));
+        } catch (Exception shareError) {
+            try {
+                Intent email = new Intent(Intent.ACTION_SENDTO, Uri.parse(CONTACT))
+                        .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.report_issue_subject))
+                        .putExtra(Intent.EXTRA_TEXT, getString(R.string.report_issue_body));
+                startActivity(email);
+            } catch (Exception emailError) {
+                Toast.makeText(this, getString(R.string.report_issue_no_app), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
 }
