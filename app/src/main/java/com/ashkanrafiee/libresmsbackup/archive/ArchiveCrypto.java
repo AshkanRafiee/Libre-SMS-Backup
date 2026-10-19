@@ -19,6 +19,8 @@ import java.util.Arrays;
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
+import javax.crypto.AEADBadTagException;
+import javax.crypto.BadPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
@@ -42,6 +44,15 @@ public final class ArchiveCrypto {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private ArchiveCrypto() {}
+
+    public static boolean isAuthenticationFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof AEADBadTagException || current instanceof BadPaddingException) return true;
+            current = current.getCause();
+        }
+        return false;
+    }
 
     /** Writes the authenticated archive header and returns the stream for encrypted payload bytes. */
     public static OutputStream openEncrypted(OutputStream destination, Context context,

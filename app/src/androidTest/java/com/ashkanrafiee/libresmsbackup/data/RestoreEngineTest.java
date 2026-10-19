@@ -41,6 +41,24 @@ public class RestoreEngineTest extends TestCase {
         }
     }
 
+    public void testInspectTracksSmsAndCallDateBounds() throws Exception {
+        File archive = File.createTempFile("libresms-restore-test-", ".json");
+        try {
+            String json = "{\"schema\":2,\"sms\":[{\"date\":30},{\"date\":10}],"
+                    + "\"calls\":[{\"date\":70},{\"date\":40}]}";
+            try (FileOutputStream output = new FileOutputStream(archive)) {
+                output.write(json.getBytes(StandardCharsets.UTF_8));
+            }
+            RestoreEngine.ArchiveSummary summary = RestoreEngine.inspect(archive);
+            assertEquals(10L, summary.smsMinDate);
+            assertEquals(30L, summary.smsMaxDate);
+            assertEquals(40L, summary.callsMinDate);
+            assertEquals(70L, summary.callsMaxDate);
+        } finally {
+            archive.delete();
+        }
+    }
+
     public void testFuturePayloadSchemaIsRejected() throws Exception {
         File archive = File.createTempFile("libresms-restore-test-", ".json");
         try {

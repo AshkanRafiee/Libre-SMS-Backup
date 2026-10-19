@@ -43,8 +43,8 @@ public final class RestoreEngine {
             while (reader.hasNext()) {
                 String name = reader.nextName();
                 if ("schema".equals(name)) schema = reader.nextInt();
-                else if ("sms".equals(name)) result.smsCount = countArray(reader);
-                else if ("calls".equals(name)) result.callsCount = countArray(reader);
+                else if ("sms".equals(name)) result.smsCount = countRecords(reader, result, true);
+                else if ("calls".equals(name)) result.callsCount = countRecords(reader, result, false);
                 else if ("mms".equals(name)) result.mmsCount = countNestedArray(reader, "messages");
                 else if ("rcs".equals(name)) result.rcsCount = countNestedArray(reader, "chats");
                 else reader.skipValue();
@@ -80,11 +80,14 @@ public final class RestoreEngine {
             boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
             ArchiveSummary preview, ProgressListener listener) throws Exception {
         ContentResolver resolver = context.getContentResolver();
-        Set<String> existingSms = (includeSms || includeRcs)
-                ? existingKeys(resolver, Telephony.Sms.CONTENT_URI, SMS_KEY_COLUMNS) : null;
-        Set<String> existingCalls = includeCalls
-                ? existingKeys(resolver, CallLog.Calls.CONTENT_URI, CALL_KEY_COLUMNS) : null;
         if (preview == null) preview = inspect(plaintext);
+        Set<String> existingSms = (includeSms || includeRcs)
+                ? existingKeys(resolver, Telephony.Sms.CONTENT_URI, SMS_KEY_COLUMNS,
+                includeRcs ? Long.MIN_VALUE : preview.smsMinDate,
+                includeRcs ? Long.MAX_VALUE : preview.smsMaxDate) : null;
+        Set<String> existingCalls = includeCalls
+                ? existingKeys(resolver, CallLog.Calls.CONTENT_URI, CALL_KEY_COLUMNS,
+                preview.callsMinDate, preview.callsMaxDate) : null;
         Map<String, Long> threadIds = new HashMap<>();
         int total = (includeSms ? preview.smsCount : 0) + (includeCalls ? preview.callsCount : 0)
                 + (includeMms ? preview.mmsCount : 0) + (includeRcs ? preview.rcsCount : 0);
@@ -135,6 +138,36 @@ public final class RestoreEngine {
         reader.beginArray();
         while (reader.hasNext()) {
             reader.skipValue();
+            if (count < Integer.MAX_VALUE) count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private static int countRecords(JsonReader reader, ArchiveSummary summary, boolean sms) throws IOException {
+        int count = 0;
+        reader.beginArray();
+        while (reader.hasNext()) {
+            reader.beginObject();
+            Long date = null;
+            while (reader.hasNext()) {
+                String name = reader.nextName();
+                if ("date".equals(name)) {
+                    if (reader.peek() == JsonToken.NUMBER) date = reader.nextLong();
+                    else if (reader.peek() == JsonToken.STRING) date = parseDate(reader.nextString());
+                    else reader.skipValue();
+                } else reader.skipValue();
+            }
+            reader.endObject();
+            if (date != null) {
+                if (sms) {
+                    summary.smsMinDate = Math.min(summary.smsMinDate, date);
+                    summary.smsMaxDate = Math.max(summary.smsMaxDate, date);
+                } else {
+                    summary.callsMinDate = Math.min(summary.callsMinDate, date);
+                    summary.callsMaxDate = Math.max(summary.callsMaxDate, date);
+                }
+            }
             if (count < Integer.MAX_VALUE) count++;
         }
         reader.endArray();
@@ -500,8 +533,17 @@ public final class RestoreEngine {
 
     private static Set<String> existingKeys(ContentResolver resolver, Uri uri, String[] columns)
             throws IOException {
+        return existingKeys(resolver, uri, columns, Long.MIN_VALUE, Long.MAX_VALUE);
+    }
+
+    private static Set<String> existingKeys(ContentResolver resolver, Uri uri, String[] columns,
+            long minDate, long maxDate) throws IOException {
         Set<String> keys = new HashSet<>();
-        try (Cursor cursor = resolver.query(uri, columns, null, null, null)) {
+        String selection = minDate != Long.MAX_VALUE && maxDate != Long.MIN_VALUE
+                ? "date >= ? AND date <= ?" : null;
+        String[] selectionArgs = selection == null ? null
+                : new String[]{String.valueOf(minDate), String.valueOf(maxDate)};
+        try (Cursor cursor = resolver.query(uri, columns, selection, selectionArgs, null)) {
             if (cursor == null) throw new IOException("provider unavailable");
             while (cursor.moveToNext()) {
                 StringBuilder key = new StringBuilder();
@@ -533,6 +575,10 @@ public final class RestoreEngine {
         try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return 0L; }
     }
 
+    private static Long parseDate(String value) {
+        try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return null; }
+    }
+
     public static final class RestoreSummary {
         public int smsAdded;
         public int callsAdded;
@@ -547,5 +593,9 @@ public final class RestoreEngine {
         public int callsCount;
         public int mmsCount;
         public int rcsCount;
+        long smsMinDate = Long.MAX_VALUE;
+        long smsMaxDate = Long.MIN_VALUE;
+        long callsMinDate = Long.MAX_VALUE;
+        long callsMaxDate = Long.MIN_VALUE;
     }
 }

@@ -23,13 +23,13 @@ public class ArchiveCryptoTest extends TestCase {
         try {
             ArchiveCrypto.decryptForTest(archive, "password-124".toCharArray());
             fail("wrong password must fail authentication");
-        } catch (Exception expected) { }
+        } catch (Exception expected) { assertTrue(ArchiveCrypto.isAuthenticationFailure(expected)); }
 
         archive[archive.length - 1] ^= 1;
         try {
             ArchiveCrypto.decryptForTest(archive, "password-123".toCharArray());
             fail("tampering must fail authentication");
-        } catch (Exception expected) { }
+        } catch (Exception expected) { assertTrue(ArchiveCrypto.isAuthenticationFailure(expected)); }
     }
 
     public void testExplicitlyUnencryptedArchiveCanBeReadWithoutPassword() throws Exception {

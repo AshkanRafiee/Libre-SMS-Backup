@@ -95,6 +95,10 @@ public class MainActivity extends Activity {
     private String restrictedPreviousSmsPackage;
     private boolean switchBackSettingsOpened;
     private boolean switchBackDialogShown;
+    private AlertDialog operationDialog;
+    private TextView operationMessage;
+    private ProgressBar operationProgress;
+    private boolean operationBusy;
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + .5f);
@@ -149,6 +153,7 @@ public class MainActivity extends Activity {
     }
 
     private void handleNotificationAction(Intent intent) {
+        if (operationBusy) return;
         if (intent == null) return;
         String action = intent.getStringExtra(ScheduledBackupReceiver.EXTRA_NOTIFICATION_ACTION);
         intent.removeExtra(ScheduledBackupReceiver.EXTRA_NOTIFICATION_ACTION);
@@ -501,7 +506,9 @@ public class MainActivity extends Activity {
                 if (ArchiveCrypto.requiresPassword(input)) askPassword(false);
                 else inspectRestore(new char[0]);
             } catch (Exception error) {
-                Toast.makeText(this, getString(R.string.error_wrong_password), Toast.LENGTH_LONG).show();
+                String failure = ArchiveCrypto.isAuthenticationFailure(error)
+                        ? getString(R.string.error_wrong_password) : getString(R.string.error_no_source);
+                Toast.makeText(this, failure, Toast.LENGTH_LONG).show();
             }
         }
         else if (requestCode == REQUEST_BACKUP_FOLDER) {
@@ -865,7 +872,7 @@ public class MainActivity extends Activity {
         currentValue.setPadding(0, dp(6), 0, 0); titleBox.addView(currentValue);
 
         LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(8), dp(4), dp(8), 0);
+        form.setPadding(dp(24), dp(4), dp(24), 0);
         form.addView(optionRow(getString(R.string.retention_simple_title), getString(R.string.retention_simple_tag),
                 getString(R.string.retention_note_simple), R.color.good,
                 getString(R.string.retention_explain_simple), current.mode == RetentionPolicy.Mode.SIMPLE,
@@ -1211,7 +1218,24 @@ public class MainActivity extends Activity {
     }
 
     private void setBusy(boolean busy, String message) {
-        setStatus(message, null); progress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        operationBusy = busy;
+        setStatus(message, null); progress.setVisibility(View.GONE);
+        if (busy) {
+            if (operationDialog == null) {
+                LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+                content.setPadding(dp(24), dp(4), dp(24), dp(8));
+                operationMessage = text(message, 14, color(R.color.text_primary));
+                operationMessage.setPadding(0, 0, 0, dp(14)); content.addView(operationMessage);
+                operationProgress = new ProgressBar(this); operationProgress.setIndeterminate(true);
+                content.addView(operationProgress, new LinearLayout.LayoutParams(-1, dp(8)));
+                operationDialog = new AlertDialog.Builder(this).setView(content).setCancelable(false).create();
+                operationDialog.setCanceledOnTouchOutside(false);
+            }
+            operationMessage.setText(message);
+            if (!operationDialog.isShowing()) operationDialog.show();
+        } else if (operationDialog != null && operationDialog.isShowing()) {
+            operationDialog.dismiss();
+        }
         backupButton.setEnabled(!busy); restoreButton.setEnabled(!busy);
         if (includeSms != null) includeSms.setEnabled(!busy);
         if (includeCalls != null) includeCalls.setEnabled(!busy);
@@ -1283,8 +1307,10 @@ public class MainActivity extends Activity {
                     showRestoreSelection(prepared);
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> { setBusy(false, getString(R.string.error_wrong_password));
-                    Toast.makeText(this, getString(R.string.notice_failed_title), Toast.LENGTH_LONG).show(); });
+                final String failure = ArchiveCrypto.isAuthenticationFailure(error)
+                        ? getString(R.string.error_wrong_password) : getString(R.string.error_no_source);
+                runOnUiThread(() -> { setBusy(false, failure);
+                    Toast.makeText(this, failure, Toast.LENGTH_LONG).show(); });
             }
         });
     }
@@ -1593,10 +1619,10 @@ public class MainActivity extends Activity {
         final int totalRecords = (restoreSms ? prepared.summary.smsCount + prepared.summary.mmsCount + prepared.summary.rcsCount : 0)
                 + (restoreCalls ? prepared.summary.callsCount : 0);
         setBusy(true, getString(R.string.status_restoring));
-        progress.setIndeterminate(totalRecords == 0);
+        operationProgress.setIndeterminate(totalRecords == 0);
         if (totalRecords > 0) {
-            progress.setMax(totalRecords);
-            progress.setProgress(0);
+            operationProgress.setMax(totalRecords);
+            operationProgress.setProgress(0);
         }
         executor.execute(() -> {
             try {
@@ -1604,10 +1630,13 @@ public class MainActivity extends Activity {
                         (completed, total) -> {
                             if (completed != total && completed != 1 && completed % 10 != 0) return;
                             runOnUiThread(() -> {
-                                progress.setIndeterminate(false);
-                                progress.setMax(Math.max(1, total));
-                                progress.setProgress(completed);
-                                setStatus(getString(R.string.restore_progress, completed, total), null);
+                                if (operationProgress != null) {
+                                    operationProgress.setIndeterminate(false);
+                                    operationProgress.setMax(Math.max(1, total));
+                                    operationProgress.setProgress(completed);
+                                }
+                                if (operationMessage != null)
+                                    operationMessage.setText(getString(R.string.restore_progress, completed, total));
                             });
                         });
                 runOnUiThread(() -> {
