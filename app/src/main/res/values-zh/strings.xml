@@ -132,7 +132,7 @@
     <string name="report_issue_with_diagnostics">附加诊断信息</string>
     <string name="report_issue_without_diagnostics">不附加诊断</string>
     <string name="report_issue_subject">Libre SMS Backup 问题报告</string>
-    <string name="report_issue_body">您好，\n\n发生了什么？\n\n预期结果：\n\n复现步骤：\n1.\n2.\n3.\n\n其他详情：\n\n发送前请删除个人信息。</string>
+    <string name="report_issue_body">Libre SMS Backup 团队您好：\n\n问题描述：\n[请描述发生了什么]\n\n预期结果：\n[您原本期望什么？]\n\n复现步骤：\n1.\n2.\n3.\n\n其他详情：\n[请添加非敏感详情]\n\n发送前我已删除私人信息。</string>
     <string name="report_issue_attachment_label">诊断信息</string>
     <string name="report_issue_share_title">发送问题报告</string>
     <string name="report_issue_no_app">没有可用的邮件或分享应用。</string>

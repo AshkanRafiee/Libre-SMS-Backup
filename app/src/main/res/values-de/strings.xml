@@ -128,7 +128,7 @@
     <string name="report_issue_with_diagnostics">Diagnose anhängen</string>
     <string name="report_issue_without_diagnostics">Ohne Diagnose</string>
     <string name="report_issue_subject">Problembericht zu Libre SMS Backup</string>
-    <string name="report_issue_body">Hallo,\n\nWas ist passiert?\n\nErwartetes Ergebnis:\n\nSchritte zur Reproduktion:\n1.\n2.\n3.\n\nWeitere Details:\n\nBitte entferne persönliche Informationen vor dem Senden.</string>
+    <string name="report_issue_body">Hallo Libre-SMS-Backup-Team,\n\nProblembeschreibung:\n[Beschreibe, was passiert ist]\n\nErwartetes Ergebnis:\n[Was hast du erwartet?]\n\nSchritte zur Reproduktion:\n1.\n2.\n3.\n\nWeitere Details:\n[Füge unsensible Details hinzu]\n\nIch habe persönliche Informationen vor dem Senden entfernt.</string>
     <string name="report_issue_attachment_label">Diagnose</string>
     <string name="report_issue_share_title">Problembericht senden</string>
     <string name="report_issue_no_app">Keine E-Mail- oder Teilen-App verfügbar.</string>

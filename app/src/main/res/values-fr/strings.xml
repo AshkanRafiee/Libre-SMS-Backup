@@ -128,7 +128,7 @@
     <string name="report_issue_with_diagnostics">Joindre les diagnostics</string>
     <string name="report_issue_without_diagnostics">Sans diagnostic</string>
     <string name="report_issue_subject">Rapport de problème Libre SMS Backup</string>
-    <string name="report_issue_body">Bonjour,\n\nQue s’est-il passé ?\n\nRésultat attendu :\n\nÉtapes pour reproduire le problème :\n1.\n2.\n3.\n\nDétails supplémentaires :\n\nVeuillez supprimer les informations personnelles avant l’envoi.</string>
+    <string name="report_issue_body">Bonjour l’équipe Libre SMS Backup,\n\nDescription du problème :\n[Décrivez ce qui s’est passé]\n\nRésultat attendu :\n[Qu’attendiez-vous ?]\n\nÉtapes pour reproduire le problème :\n1.\n2.\n3.\n\nDétails supplémentaires :\n[Ajoutez des détails non sensibles]\n\nJ’ai supprimé les informations privées avant l’envoi.</string>
     <string name="report_issue_attachment_label">Diagnostics</string>
     <string name="report_issue_share_title">Envoyer le rapport</string>
     <string name="report_issue_no_app">Aucune application d’e-mail ou de partage n’est disponible.</string>

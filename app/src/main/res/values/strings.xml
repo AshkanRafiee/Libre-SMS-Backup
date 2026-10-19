@@ -192,20 +192,7 @@
     <string name="report_issue_with_diagnostics">Include diagnostics</string>
     <string name="report_issue_without_diagnostics">Without diagnostics</string>
     <string name="report_issue_subject">Libre SMS Backup problem report</string>
-    <string name="report_issue_body">Hello,
-
-What happened:
-
-Expected result:
-
-Steps to reproduce:
-1.
-2.
-3.
-
-Additional details:
-
-Please remove personal information before sending.</string>
+    <string name="report_issue_body">Hello Libre SMS Backup team,\n\nProblem description:\n[Describe what happened]\n\nExpected result:\n[What did you expect?]\n\nSteps to reproduce:\n1.\n2.\n3.\n\nAdditional details:\n[Add non-sensitive details]\n\nI have removed private information before sending.</string>
     <string name="report_issue_attachment_label">Diagnostics</string>
     <string name="report_issue_share_title">Send issue report</string>
     <string name="report_issue_no_app">No email or sharing app is available.</string>

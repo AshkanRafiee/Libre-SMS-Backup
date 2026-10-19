@@ -128,7 +128,7 @@
     <string name="report_issue_with_diagnostics">إرفاق التشخيصات</string>
     <string name="report_issue_without_diagnostics">دون تشخيصات</string>
     <string name="report_issue_subject">تقرير مشكلة في Libre SMS Backup</string>
-    <string name="report_issue_body">مرحبًا،\n\nما الذي حدث؟\n\nالنتيجة المتوقعة:\n\nخطوات إعادة المشكلة:\n1.\n2.\n3.\n\nتفاصيل إضافية:\n\nيرجى إزالة المعلومات الشخصية قبل الإرسال.</string>
+    <string name="report_issue_body">مرحبًا فريق Libre SMS Backup،\n\nوصف المشكلة:\n[اكتب ما حدث]\n\nالنتيجة المتوقعة:\n[ما الذي توقعت حدوثه؟]\n\nخطوات إعادة المشكلة:\n1.\n2.\n3.\n\nتفاصيل إضافية:\n[أضف تفاصيل غير حساسة]\n\nلقد أزلت المعلومات الخاصة قبل الإرسال.</string>
     <string name="report_issue_attachment_label">التشخيصات</string>
     <string name="report_issue_share_title">إرسال تقرير المشكلة</string>
     <string name="report_issue_no_app">لا يوجد تطبيق بريد أو مشاركة متاح.</string>

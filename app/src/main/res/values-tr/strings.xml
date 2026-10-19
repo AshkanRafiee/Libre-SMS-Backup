@@ -132,7 +132,7 @@
     <string name="report_issue_with_diagnostics">Tanılamaları ekle</string>
     <string name="report_issue_without_diagnostics">Tanılama olmadan</string>
     <string name="report_issue_subject">Libre SMS Backup sorun bildirimi</string>
-    <string name="report_issue_body">Merhaba,\n\nNe oldu?\n\nBeklenen sonuç:\n\nYeniden oluşturma adımları:\n1.\n2.\n3.\n\nEk ayrıntılar:\n\nGöndermeden önce kişisel bilgileri kaldırın.</string>
+    <string name="report_issue_body">Merhaba Libre SMS Backup ekibi,\n\nSorun açıklaması:\n[Ne olduğunu açıklayın]\n\nBeklenen sonuç:\n[Ne olmasını bekliyordunuz?]\n\nYeniden oluşturma adımları:\n1.\n2.\n3.\n\nEk ayrıntılar:\n[Hassas olmayan ayrıntılar ekleyin]\n\nGöndermeden önce özel bilgileri kaldırdım.</string>
     <string name="report_issue_attachment_label">Tanılama</string>
     <string name="report_issue_share_title">Sorun bildirimini gönder</string>
     <string name="report_issue_no_app">Kullanılabilir e-posta veya paylaşım uygulaması yok.</string>

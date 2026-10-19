@@ -122,7 +122,12 @@ public class AboutActivity extends Activity {
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         .setClipData(ClipData.newRawUri(getString(R.string.report_issue_attachment_label), attachment));
             }
-            startActivity(Intent.createChooser(share, getString(R.string.report_issue_share_title)));
+            Intent chooser = Intent.createChooser(share, getString(R.string.report_issue_share_title));
+            if (attachment != null) {
+                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        .setClipData(ClipData.newRawUri(getString(R.string.report_issue_attachment_label), attachment));
+            }
+            startActivity(chooser);
         } catch (Exception shareError) {
             try {
                 Intent email = new Intent(Intent.ACTION_SENDTO, Uri.parse(CONTACT))
