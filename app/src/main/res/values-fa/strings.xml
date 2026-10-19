@@ -97,6 +97,7 @@
     <string name="notice_failed_title">عملیات ناموفق بود</string>
     <string name="backup_summary">%1$d پیامک و %2$d گزارش تماس ذخیره شد.</string>
     <string name="restore_summary">%1$d پیامک و %2$d گزارش تماس اضافه شد؛ %3$d مورد تکراری رد شد.</string>
+    <string name="restore_progress">در حال بازیابی %1$d از %2$d رکورد…</string>
     <string name="restore_summary_failed">%1$d پیامک و %2$d گزارش تماس اضافه شد؛ %3$d مورد قابل بازگردانی نبود.</string>
     <string name="restore_choose_title">انتخاب موارد بازگردانی</string>
     <string name="restore_choose_message">مواردی را که می‌خواهید اضافه شوند انتخاب کنید. سوابق موجود شناسایی و رد می‌شوند.</string>

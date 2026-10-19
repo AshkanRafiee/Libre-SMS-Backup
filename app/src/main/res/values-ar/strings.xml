@@ -97,6 +97,7 @@
     <string name="notice_failed_title">فشلت العملية</string>
     <string name="backup_summary">تم حفظ %1$d رسالة و%2$d سجل مكالمات.</string>
     <string name="restore_summary">تمت إضافة %1$d رسالة و%2$d سجل مكالمات؛ تم تخطي %3$d مكرر.</string>
+    <string name="restore_progress">جارٍ استعادة %1$d من أصل %2$d سجلًا…</string>
     <string name="restore_summary_failed">تمت إضافة %1$d رسالة و%2$d سجل مكالمات؛ تعذر استعادة %3$d.</string>
     <string name="restore_choose_title">اختر ما تريد استعادته</string>
     <string name="restore_choose_message">حدد السجلات التي تريد إضافتها. سيتم اكتشاف السجلات الموجودة وتخطيها.</string>

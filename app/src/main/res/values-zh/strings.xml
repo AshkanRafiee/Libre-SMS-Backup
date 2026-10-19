@@ -101,6 +101,7 @@
     <string name="notice_failed_title">操作失败</string>
     <string name="backup_summary">已保存 %1$d 条短信和 %2$d 条通话记录。</string>
     <string name="restore_summary">已添加 %1$d 条短信和 %2$d 条通话记录；跳过 %3$d 条重复记录。</string>
+    <string name="restore_progress">正在恢复 %2$d 条记录中的第 %1$d 条…</string>
     <string name="restore_summary_failed">已添加 %1$d 条短信和 %2$d 条通话记录；%3$d 条无法恢复。</string>
     <string name="restore_choose_title">选择要恢复的内容</string>
     <string name="restore_choose_message">选择要添加的记录。已有记录会被检测并跳过。</string>

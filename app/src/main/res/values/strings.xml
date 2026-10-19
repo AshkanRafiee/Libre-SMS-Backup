@@ -136,6 +136,7 @@
     <string name="backup_summary">Saved %1$d SMS messages and %2$d call records.</string>
     <string name="backup_summary_extended">Saved %1$d SMS, %2$d calls, %3$d MMS, and %4$d RCS records.</string>
     <string name="restore_summary">Added %1$d SMS messages and %2$d call records; skipped %3$d duplicates.</string>
+    <string name="restore_progress">Restoring %1$d of %2$d records…</string>
     <string name="restore_summary_failed">Added %1$d SMS messages and %2$d call records; %3$d could not be restored.</string>
     <string name="restore_summary_extended">Added %1$d SMS, %2$d calls, %3$d MMS, and %4$d RCS records; %5$d duplicates skipped.</string>
     <string name="restore_summary_extended_failed">Added %1$d SMS, %2$d calls, %3$d MMS, and %4$d RCS records; %5$d could not be restored.</string>

@@ -101,6 +101,7 @@
     <string name="notice_failed_title">İşlem başarısız</string>
     <string name="backup_summary">%1$d SMS ve %2$d arama kaydı kaydedildi.</string>
     <string name="restore_summary">%1$d SMS ve %2$d arama kaydı eklendi; %3$d yinelenen kayıt atlandı.</string>
+    <string name="restore_progress">%2$d kaydın %1$d tanesi geri yükleniyor…</string>
     <string name="restore_summary_failed">%1$d SMS ve %2$d arama kaydı eklendi; %3$d geri yüklenemedi.</string>
     <string name="restore_choose_title">Geri yüklenecekleri seç</string>
     <string name="restore_choose_message">Eklenecek kayıtları seçin. Mevcut kayıtlar algılanıp atlanır.</string>

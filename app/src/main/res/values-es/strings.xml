@@ -97,6 +97,7 @@
     <string name="notice_failed_title">Operación fallida</string>
     <string name="backup_summary">Se guardaron %1$d SMS y %2$d registros de llamadas.</string>
     <string name="restore_summary">Se añadieron %1$d SMS y %2$d registros; se omitieron %3$d duplicados.</string>
+    <string name="restore_progress">Restaurando %1$d de %2$d registros…</string>
     <string name="restore_summary_failed">Se añadieron %1$d SMS y %2$d registros; no se pudieron restaurar %3$d.</string>
     <string name="restore_choose_title">Elegir qué restaurar</string>
     <string name="restore_choose_message">Selecciona los registros que quieres añadir. Los existentes se detectan y omiten.</string>

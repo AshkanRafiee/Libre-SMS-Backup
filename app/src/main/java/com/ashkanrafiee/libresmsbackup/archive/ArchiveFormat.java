@@ -170,6 +170,14 @@ public final class ArchiveFormat {
                     includeSms, includeSms, summary);
         }
 
+        public RestoreEngine.RestoreSummary restore(Context context,
+                boolean includeSms, boolean includeCalls,
+                RestoreEngine.ProgressListener listener) throws Exception {
+            if (closed) throw new IOException("restore session is closed");
+            return RestoreEngine.restore(context, plaintext, includeSms, includeCalls,
+                    includeSms, includeSms, summary, listener);
+        }
+
         @Override public void close() {
             if (!closed) {
                 closed = true;

@@ -97,6 +97,7 @@
     <string name="notice_failed_title">Vorgang fehlgeschlagen</string>
     <string name="backup_summary">%1$d SMS und %2$d Anruflisten gespeichert.</string>
     <string name="restore_summary">%1$d SMS und %2$d Anruflisten hinzugefügt; %3$d Duplikate übersprungen.</string>
+    <string name="restore_progress">%1$d von %2$d Einträgen werden wiederhergestellt…</string>
     <string name="restore_summary_failed">%1$d SMS und %2$d Anruflisten hinzugefügt; %3$d konnten nicht wiederhergestellt werden.</string>
     <string name="restore_choose_title">Wiederherzustellende Daten wählen</string>
     <string name="restore_choose_message">Wählen Sie die hinzuzufügenden Daten. Vorhandene Einträge werden erkannt und übersprungen.</string>

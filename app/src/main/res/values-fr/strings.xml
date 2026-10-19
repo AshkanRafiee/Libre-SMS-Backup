@@ -97,6 +97,7 @@
     <string name="notice_failed_title">Échec de l’opération</string>
     <string name="backup_summary">%1$d SMS et %2$d journaux d’appels enregistrés.</string>
     <string name="restore_summary">%1$d SMS et %2$d journaux d’appels ajoutés ; %3$d doublons ignorés.</string>
+    <string name="restore_progress">Restauration de %1$d sur %2$d enregistrements…</string>
     <string name="restore_summary_failed">%1$d SMS et %2$d journaux d’appels ajoutés ; %3$d impossibles à restaurer.</string>
     <string name="restore_choose_title">Choisir les éléments à restaurer</string>
     <string name="restore_choose_message">Sélectionnez les éléments à ajouter. Les données existantes sont détectées et ignorées.</string>

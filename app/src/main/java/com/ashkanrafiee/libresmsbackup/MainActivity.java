@@ -1591,10 +1591,26 @@ public class MainActivity extends Activity {
         // after an earlier restore attempt. The user still explicitly asked to
         // choose their preferred SMS app again after every SMS restore.
         final boolean needsSmsSwitchBack = restoreSms;
+        final int totalRecords = (restoreSms ? prepared.summary.smsCount + prepared.summary.mmsCount + prepared.summary.rcsCount : 0)
+                + (restoreCalls ? prepared.summary.callsCount : 0);
         setBusy(true, getString(R.string.status_restoring));
+        progress.setIndeterminate(totalRecords == 0);
+        if (totalRecords > 0) {
+            progress.setMax(totalRecords);
+            progress.setProgress(0);
+        }
         executor.execute(() -> {
             try {
-                RestoreEngine.RestoreSummary summary = prepared.restore(this, restoreSms, restoreCalls);
+                RestoreEngine.RestoreSummary summary = prepared.restore(this, restoreSms, restoreCalls,
+                        (completed, total) -> {
+                            if (completed != total && completed != 1 && completed % 10 != 0) return;
+                            runOnUiThread(() -> {
+                                progress.setIndeterminate(false);
+                                progress.setMax(Math.max(1, total));
+                                progress.setProgress(completed);
+                                setStatus(getString(R.string.restore_progress, completed, total), null);
+                            });
+                        });
                 runOnUiThread(() -> {
                     int restoredMessages = summary.smsAdded + summary.mmsAdded + summary.rcsAdded;
                     int restoreText = summary.mmsAdded > 0 || summary.rcsAdded > 0
