@@ -133,11 +133,19 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify
           --verbose --print-certs app/build/outputs/apk/release/app-release.apk
       - name: Verify artifact metadata and AAB signature
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           badging=$($ANDROID_HOME/build-tools/36.0.0/aapt2 dump badging app/build/outputs/apk/release/app-release.apk)
           grep -F "package: name='com.ashkanrafiee.libresmsbackup' versionCode='10000' versionName='1.0.0'" <<< "$badging"
-          jarsigner -verify -strict app/build/outputs/bundle/release/app-release.aab
+          # Anchor verification to the release keystore: jarsigner -strict exits 4
+          # for self-signed certs / chains not trusted by the default trust store,
+          # which is always true for an Android release keystore.
+          jarsigner -verify -strict \
+            -keystore app/libresmsbackup-release.p12 \
+            -storepass "$KEYSTORE_PASSWORD" \
+            app/build/outputs/bundle/release/app-release.aab
       - name: Create checksums
         run: |
           set -euo pipefail
