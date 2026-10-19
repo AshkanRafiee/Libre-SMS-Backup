@@ -1625,8 +1625,10 @@ public class MainActivity extends Activity {
             operationProgress.setProgress(0);
         }
         executor.execute(() -> {
+            RestoreEngine.RestoreSummary summary = null;
+            Exception failure = null;
             try {
-                RestoreEngine.RestoreSummary summary = prepared.restore(this, restoreSms, restoreCalls,
+                summary = prepared.restore(this, restoreSms, restoreCalls,
                         (completed, total) -> {
                             if (completed != total && completed != 1 && completed % 10 != 0) return;
                             runOnUiThread(() -> {
@@ -1639,16 +1641,24 @@ public class MainActivity extends Activity {
                                     operationMessage.setText(getString(R.string.restore_progress, completed, total));
                             });
                         });
+            } catch (Exception error) {
+                failure = error;
+            } finally {
+                // Do not publish completion until the authenticated payload has been closed and
+                // all restore-owned resources have been released.
+                prepared.close();
+            }
+            if (failure == null) {
+                RestoreEngine.RestoreSummary completed = summary;
                 runOnUiThread(() -> {
-                    int restoredMessages = summary.smsAdded + summary.mmsAdded + summary.rcsAdded;
-                    int restoreText = summary.mmsAdded > 0 || summary.rcsAdded > 0
-                            ? (summary.failed == 0 ? R.string.restore_summary_extended : R.string.restore_summary_extended_failed)
-                            : (summary.failed == 0 ? R.string.restore_summary : R.string.restore_summary_failed);
-                    setBusy(false, summary.mmsAdded > 0 || summary.rcsAdded > 0
-                            ? getString(restoreText, summary.smsAdded, summary.callsAdded, summary.mmsAdded, summary.rcsAdded,
-                            summary.failed == 0 ? summary.duplicates : summary.failed)
-                            : getString(restoreText, summary.smsAdded, summary.callsAdded,
-                            summary.failed == 0 ? summary.duplicates : summary.failed));
+                    int restoreText = completed.mmsAdded > 0 || completed.rcsAdded > 0
+                            ? (completed.failed == 0 ? R.string.restore_summary_extended : R.string.restore_summary_extended_failed)
+                            : (completed.failed == 0 ? R.string.restore_summary : R.string.restore_summary_failed);
+                    setBusy(false, completed.mmsAdded > 0 || completed.rcsAdded > 0
+                            ? getString(restoreText, completed.smsAdded, completed.callsAdded, completed.mmsAdded, completed.rcsAdded,
+                            completed.failed == 0 ? completed.duplicates : completed.failed)
+                            : getString(restoreText, completed.smsAdded, completed.callsAdded,
+                            completed.failed == 0 ? completed.duplicates : completed.failed));
                     Toast.makeText(this, getString(R.string.notice_restore_complete_title), Toast.LENGTH_SHORT).show();
                     if (needsSmsSwitchBack) {
                         getSharedPreferences("restore_sms_role", MODE_PRIVATE)
@@ -1656,11 +1666,9 @@ public class MainActivity extends Activity {
                         openSmsSettingsAfterRestore();
                     }
                 });
-            } catch (Exception error) {
+            } else {
                 runOnUiThread(() -> { setBusy(false, getString(R.string.error_generic));
                     Toast.makeText(this, getString(R.string.notice_failed_title), Toast.LENGTH_LONG).show(); });
-            } finally {
-                prepared.close();
             }
         });
     }
