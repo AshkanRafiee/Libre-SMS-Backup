@@ -2,13 +2,14 @@ Libre SMS Backup keeps your SMS, MMS, and call records under your control.
 
 • Local-first: no account, cloud sync, analytics, tracker, or Internet permission.
 • Optional encryption: password-protected AES-256-GCM .lsb.enc archives; unencrypted archives use .lsb.
-• One portable file: capture selected SMS messages, MMS, and/or call logs together; accessible RCS data is captured on a best-effort basis.
+• Flexible scope: capture SMS, MMS, and/or call logs together; accessible RCS data is captured on a best-effort basis.
 • Safe restore: encrypted archives are authenticated before phone data changes; unencrypted archives are clearly identified.
 • Duplicate-aware: existing records are skipped instead of copied again.
+• Automatic backups: schedule daily, weekly, or monthly runs and choose how many backup sets to keep.
 • Scheduled backup notifications show how many records were saved in each run.
 • Display choices: use the system theme, light theme, or dark theme.
 • Free and open source under GPL-3.0-only.
 
-Permissions are requested when you start a backup, restore, or automatic schedule. Encryption is optional for scheduled backups and follows the current Encryption setting for future archives. The app does not store your backup password in plain text. Restricted-message backups and SMS/MMS restore may require the app to be the default SMS app on newer Android versions; scheduled backups pause while restricted messages are selected, and the app helps you choose your previous SMS app again afterward. Avoid receiving new MMS while it temporarily holds that role because incoming MMS delivery is not handled.
+Data permissions are requested when you start a backup, restore, or automatic schedule; notification permission is separate and optional. Encryption is optional for scheduled backups and follows the current Encryption setting for future archives. The app does not store your backup password in plain text. Restricted-message backups and SMS/MMS restore may require the app to be the default SMS app on newer Android versions; scheduled backups pause while restricted messages are selected, and the app helps you choose your previous SMS app again afterward. Avoid receiving new MMS while it temporarily holds that role because incoming MMS delivery is not handled.
 
-Your data stays on your device unless you choose a destination and move the backup yourself.
+Your data stays on your device or in the destination you choose. A cloud-backed provider may sync that destination according to its own rules; Libre SMS Backup has no cloud backend.

@@ -159,7 +159,7 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
         android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= 26
                 ? new android.app.Notification.Builder(context, CHANNEL)
                 : new android.app.Notification.Builder(context);
-        builder.setSmallIcon(R.mipmap.ic_launcher).setContentTitle(context.getString(success
+        builder.setSmallIcon(R.drawable.ic_notification).setContentTitle(context.getString(success
                 ? R.string.notification_backup_complete_title : R.string.notification_backup_failed_title))
                 .setContentText(message).setAutoCancel(true).setContentIntent(PendingIntent.getActivity(context, NOTIFICATION_RESULT,
                         open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
@@ -174,7 +174,7 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
         Intent settings = new Intent(context, MainActivity.class).putExtra(EXTRA_NOTIFICATION_ACTION, ACTION_EXACT_ALARM);
         android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= 26
                 ? new android.app.Notification.Builder(context, CHANNEL) : new android.app.Notification.Builder(context);
-        builder.setSmallIcon(R.mipmap.ic_launcher)
+        builder.setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(context.getString(R.string.notification_backup_failed_title))
                 .setContentText(context.getString(R.string.schedule_exact_needed))
                 .setAutoCancel(true)

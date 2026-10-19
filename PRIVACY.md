@@ -8,7 +8,7 @@ The app does not request the Android `INTERNET` permission.
 
 ## Data handled on the device
 
-When you start a backup or restore, Android may grant the app access to the
+When you start a manual or scheduled backup, or a restore, Android may grant the app access to the
 SMS, MMS, contacts, and call-log providers needed for the operation. The app
 uses that data on the device to create or restore the archive you selected. It
 does not send message bodies, phone numbers, contacts, call records, passwords,
@@ -29,7 +29,7 @@ text. The project cannot recover a forgotten password or encrypted archive.
 ## Default SMS role
 
 Android may require Libre SMS Backup to be the default SMS app temporarily for
-restricted-message backups or SMS restore. The app explains this transition
+restricted-message backups or SMS/MMS restore. The app explains this transition
 and guides you back to your preferred SMS app. While the app temporarily holds
 that role, incoming MMS delivery is not handled by Libre SMS Backup.
 
