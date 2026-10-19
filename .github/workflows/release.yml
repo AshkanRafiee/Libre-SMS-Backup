@@ -127,13 +127,17 @@ jobs:
                   properties.write(f'{key}={escape(value)}\n')
           PY
           keytool -list -keystore app/libresmsbackup-release.p12 \
-            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+            -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" >/dev/null
       - name: Build signed release artifacts
         run: bash ./gradlew --no-daemon clean lintRelease assembleRelease bundleRelease
       - name: Verify APK signature
-        run: >-
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify
-          --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+        run: |
+          set -euo pipefail
+          certs=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk)
+          echo "$certs"
+          # Fail if signing regressed: the APK must carry the release certificate,
+          # not merely a valid signature from any key.
+          grep -F "Signer #1 certificate SHA-256 digest: 844b6bf02ce31c3f60431c855f627102260e41d0fa1c77ff19ab75f183777646" <<< "$certs"
       - name: Verify artifact metadata and AAB signature
         env:
           KEYSTORE_PASSWORD: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_PASSWORD }}
@@ -148,7 +152,7 @@ jobs:
           # which is always true for an Android release keystore.
           jarsigner -verify -strict \
             -keystore app/libresmsbackup-release.p12 \
-            -storepass "$KEYSTORE_PASSWORD" \
+            -storepass:env KEYSTORE_PASSWORD \
             app/build/outputs/bundle/release/app-release.aab
       - name: Create checksums
         run: |
