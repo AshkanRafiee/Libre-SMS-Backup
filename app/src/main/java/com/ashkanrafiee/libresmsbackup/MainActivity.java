@@ -61,6 +61,8 @@ public class MainActivity extends Activity {
     private static final int REQUEST_SMS_SWITCH_BACK = 17;
     private static final int REQUEST_NOTIFICATIONS = 18;
     private static final int REQUEST_RESTORE_WRITE = 19;
+    private static final int MAX_SMS_ROLE_CHECKS = 40;
+    private static final long SMS_ROLE_CHECK_DELAY_MS = 250L;
     private static final String RESTRICTED_ROLE_PREFS = "restricted_sms_role";
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView status;
@@ -439,10 +441,7 @@ public class MainActivity extends Activity {
         else if (requestCode == REQUEST_RESTORE_WRITE && pendingRestore != null) {
             pendingRestoreWritePermission = false;
             ArchiveFormat.PreparedRestore prepared = pendingRestore;
-            pendingRestore = null;
             continueSelectedRestore(prepared, pendingRestoreSms, pendingRestoreCalls);
-            pendingRestoreSms = false;
-            pendingRestoreCalls = false;
         }
         else if (requestCode == REQUEST_SCHEDULE_PERMISSIONS) {
             if (ScheduleManager.folder(this) == null) chooseBackupFolder(false, true);
@@ -1416,7 +1415,6 @@ public class MainActivity extends Activity {
                     pendingRestoreAfterSmsRole = true;
                     temporarilyChangedSmsRole = true;
                     getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit()
-                            .putBoolean("switch_back_pending", true)
                             .putString("previous_package", previousSmsPackage).apply();
                     if (!requestDefaultSmsRole()) {
                         cancelPendingSmsRestore();
@@ -1507,9 +1505,9 @@ public class MainActivity extends Activity {
                 pendingBackupAfterSmsRole = false;
                 startManualBackupFlow();
             }
-        } else if (attempt < 5) {
+        } else if (attempt < MAX_SMS_ROLE_CHECKS) {
             new Handler(Looper.getMainLooper()).postDelayed(
-                    () -> checkRestrictedSmsRoleAndContinue(attempt + 1), 250L);
+                    () -> checkRestrictedSmsRoleAndContinue(attempt + 1), SMS_ROLE_CHECK_DELAY_MS);
         } else {
             pendingBackupAfterSmsRole = false;
             restrictedSmsRoleRequestPending = false;
@@ -1538,8 +1536,9 @@ public class MainActivity extends Activity {
             runRestore(prepared, pendingRestoreSms, pendingRestoreCalls);
             pendingRestoreSms = false;
             pendingRestoreCalls = false;
-        } else if (attempt < 5) {
-            new Handler(Looper.getMainLooper()).postDelayed(() -> checkSmsRoleAndContinue(attempt + 1), 250L);
+        } else if (attempt < MAX_SMS_ROLE_CHECKS) {
+            new Handler(Looper.getMainLooper()).postDelayed(
+                    () -> checkSmsRoleAndContinue(attempt + 1), SMS_ROLE_CHECK_DELAY_MS);
         } else {
             cancelPendingSmsRestore();
             showSmsRoleFailure();

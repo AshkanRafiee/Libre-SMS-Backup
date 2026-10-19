@@ -17,8 +17,10 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Restores an already authenticated archive without parsing the complete payload into memory. */
@@ -62,12 +64,19 @@ public final class RestoreEngine {
 
     public static RestoreSummary restore(Context context, File plaintext,
             boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs) throws Exception {
+        return restore(context, plaintext, includeSms, includeCalls, includeMms, includeRcs, null);
+    }
+
+    public static RestoreSummary restore(Context context, File plaintext,
+            boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
+            ArchiveSummary preview) throws Exception {
         ContentResolver resolver = context.getContentResolver();
         Set<String> existingSms = (includeSms || includeRcs)
                 ? existingKeys(resolver, Telephony.Sms.CONTENT_URI, SMS_KEY_COLUMNS) : null;
         Set<String> existingCalls = includeCalls
                 ? existingKeys(resolver, CallLog.Calls.CONTENT_URI, CALL_KEY_COLUMNS) : null;
-        ArchiveSummary preview = inspect(plaintext);
+        if (preview == null) preview = inspect(plaintext);
+        Map<String, Long> contactPersonIds = new HashMap<>();
         boolean mmsProviderAvailable = true;
         Set<String> existingMms = new HashSet<>();
         if (includeMms && preview.mmsCount > 0) {
@@ -84,16 +93,16 @@ public final class RestoreEngine {
             while (reader.hasNext()) {
                 String name = reader.nextName();
                 if ("sms".equals(name)) {
-                    if (includeSms) restoreArray(reader, resolver, Telephony.Sms.CONTENT_URI, true, existingSms, result);
+                    if (includeSms) restoreArray(reader, resolver, Telephony.Sms.CONTENT_URI, true, existingSms, result, contactPersonIds);
                     else reader.skipValue();
                 } else if ("calls".equals(name)) {
-                    if (includeCalls) restoreArray(reader, resolver, CallLog.Calls.CONTENT_URI, false, existingCalls, result);
+                    if (includeCalls) restoreArray(reader, resolver, CallLog.Calls.CONTENT_URI, false, existingCalls, result, null);
                     else reader.skipValue();
                 } else if ("mms".equals(name)) {
                     if (includeMms) restoreMmsSection(reader, resolver, existingMms, result, mmsProviderAvailable);
                     else reader.skipValue();
                 } else if ("rcs".equals(name)) {
-                    if (includeRcs) restoreRcsSection(reader, resolver, existingSms, result);
+                    if (includeRcs) restoreRcsSection(reader, resolver, existingSms, result, contactPersonIds);
                     else reader.skipValue();
                 } else {
                     reader.skipValue();
@@ -128,7 +137,8 @@ public final class RestoreEngine {
     }
 
     private static void restoreArray(JsonReader reader, ContentResolver resolver, Uri uri,
-            boolean sms, Set<String> existing, RestoreSummary result) throws IOException {
+            boolean sms, Set<String> existing, RestoreSummary result,
+            Map<String, Long> contactPersonIds) throws IOException {
         reader.beginArray();
         while (reader.hasNext()) {
             ContentValues values = readRecord(reader, sms);
@@ -138,7 +148,7 @@ public final class RestoreEngine {
                 continue;
             }
             try {
-                if (sms) attachContactPerson(resolver, values);
+                if (sms) attachContactPerson(resolver, values, contactPersonIds);
                 Uri inserted = resolver.insert(uri, values);
                 if (inserted == null) throw new SecurityException("provider rejected record");
                 existing.add(key);
@@ -167,7 +177,7 @@ public final class RestoreEngine {
             String name = reader.nextName();
             if (reader.peek() == JsonToken.NULL) { reader.nextNull(); continue; }
             // Provider IDs and thread IDs are local to a device and must never be restored.
-            if ("_id".equals(name) || "thread_id".equals(name) || "person".equals(name)) {
+            if (isNonPortableColumn(name) || (sms && !isRestorableSmsColumn(name))) {
                 reader.skipValue();
             } else if (reader.peek() == JsonToken.BEGIN_OBJECT) {
                 readEncodedValue(reader, values, name);
@@ -199,6 +209,20 @@ public final class RestoreEngine {
         if ("base64".equals(encoding) && data != null) values.put(name, android.util.Base64.decode(data, android.util.Base64.DEFAULT));
     }
 
+    private static boolean isNonPortableColumn(String name) {
+        return "_id".equals(name) || "thread_id".equals(name) || "person".equals(name)
+                || "contact_id".equals(name) || "rcsdb_id".equals(name) || "_data".equals(name)
+                || "sub_id".equals(name) || "phone_id".equals(name) || "index_on_icc".equals(name);
+    }
+
+    private static boolean isRestorableSmsColumn(String name) {
+        return "address".equals(name) || "date".equals(name) || "date_sent".equals(name)
+                || "read".equals(name) || "seen".equals(name) || "type".equals(name)
+                || "body".equals(name) || "subject".equals(name) || "service_center".equals(name)
+                || "reply_path_present".equals(name) || "locked".equals(name)
+                || "status".equals(name) || "error_code".equals(name);
+    }
+
     private static boolean isLongField(String name, boolean sms) {
         if (sms) return "date".equals(name) || "date_sent".equals(name) || "read".equals(name)
                 || "status".equals(name) || "type".equals(name) || "reply_path_present".equals(name)
@@ -217,8 +241,9 @@ public final class RestoreEngine {
         if (sms) {
             copy(source, values, "address"); copy(source, values, "date"); copy(source, values, "date_sent");
             copy(source, values, "body"); copy(source, values, "type"); copy(source, values, "read");
-            copy(source, values, "seen"); copy(source, values, "status"); copy(source, values, "sub_id");
-            copy(source, values, "person");
+            copy(source, values, "seen"); copy(source, values, "status"); copy(source, values, "subject");
+            copy(source, values, "service_center"); copy(source, values, "reply_path_present");
+            copy(source, values, "locked"); copy(source, values, "error_code");
         } else {
             copy(source, values, "number"); copy(source, values, "date"); copy(source, values, "duration");
             copy(source, values, "type"); copy(source, values, "new"); copy(source, values, "name");
@@ -232,13 +257,22 @@ public final class RestoreEngine {
         else to.put(key, from.getAsLong(key));
     }
 
-    private static void attachContactPerson(ContentResolver resolver, ContentValues values) {
+    private static void attachContactPerson(ContentResolver resolver, ContentValues values,
+            Map<String, Long> contactPersonIds) {
         String address = values.getAsString("address");
         if (address == null || address.isEmpty() || values.containsKey("person")) return;
+        if (contactPersonIds.containsKey(address)) {
+            Long personId = contactPersonIds.get(address);
+            if (personId != null) values.put("person", personId);
+            return;
+        }
         Uri lookup = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(address));
+        Long personId = null;
         try (Cursor cursor = resolver.query(lookup, new String[]{ContactsContract.PhoneLookup._ID}, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) values.put("person", cursor.getLong(0));
+            if (cursor != null && cursor.moveToFirst()) personId = cursor.getLong(0);
         } catch (Exception ignored) { }
+        contactPersonIds.put(address, personId);
+        if (personId != null) values.put("person", personId);
     }
 
     private static void restoreMmsSection(JsonReader reader, ContentResolver resolver,
@@ -344,7 +378,8 @@ public final class RestoreEngine {
     }
 
     private static void restoreRcsSection(JsonReader reader, ContentResolver resolver,
-            Set<String> existingSms, RestoreSummary result) throws IOException {
+            Set<String> existingSms, RestoreSummary result,
+            Map<String, Long> contactPersonIds) throws IOException {
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
@@ -355,7 +390,7 @@ public final class RestoreEngine {
                     reader.beginObject();
                     while (reader.hasNext()) {
                         String child = reader.nextName();
-                        if ("row".equals(child)) row.putAll(readRecord(reader, true));
+                        if ("row".equals(child)) row.putAll(readRecord(reader, false));
                         else reader.skipValue();
                     }
                     reader.endObject();
@@ -373,7 +408,7 @@ public final class RestoreEngine {
                     sms.put("read", row.getAsInteger("read") == null ? 1 : row.getAsInteger("read"));
                     sms.put("seen", row.getAsInteger("seen") == null ? 1 : row.getAsInteger("seen"));
                     sms.put("type", row.getAsInteger("type") == null ? Telephony.Sms.MESSAGE_TYPE_INBOX : row.getAsInteger("type"));
-                    attachContactPerson(resolver, sms);
+                    attachContactPerson(resolver, sms, contactPersonIds);
                     String key = keyFor(sms, true);
                     if (existingSms.contains(key)) { result.duplicates++; continue; }
                     try {

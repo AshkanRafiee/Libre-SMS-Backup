@@ -166,7 +166,8 @@ public final class ArchiveFormat {
         public RestoreEngine.RestoreSummary restore(Context context,
                 boolean includeSms, boolean includeCalls) throws Exception {
             if (closed) throw new IOException("restore session is closed");
-            return RestoreEngine.restore(context, plaintext, includeSms, includeCalls);
+            return RestoreEngine.restore(context, plaintext, includeSms, includeCalls,
+                    includeSms, includeSms, summary);
         }
 
         @Override public void close() {
@@ -206,7 +207,8 @@ public final class ArchiveFormat {
 
     private static boolean isNonPortableColumn(String column) {
         return "_id".equals(column) || "thread_id".equals(column) || "person".equals(column)
-                || "contact_id".equals(column) || "rcsdb_id".equals(column) || "_data".equals(column);
+                || "contact_id".equals(column) || "rcsdb_id".equals(column) || "_data".equals(column)
+                || "sub_id".equals(column) || "phone_id".equals(column) || "index_on_icc".equals(column);
     }
 
     private static int writeMmsSection(Context context, JsonWriter json, boolean enabled) throws IOException {
