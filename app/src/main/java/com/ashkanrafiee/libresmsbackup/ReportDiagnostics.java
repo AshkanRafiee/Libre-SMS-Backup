@@ -3,47 +3,28 @@ package com.ashkanrafiee.libresmsbackup;
 import android.content.Context;
 import android.os.Build;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import java.util.UUID;
 
-/** Creates a small allow-listed diagnostic file without reading phone records or paths. */
+/** Creates small allow-listed diagnostics without reading phone records or paths. */
 final class ReportDiagnostics {
-    private static final String DIRECTORY = "reports";
-    private static final long MAX_AGE_MS = 24L * 60L * 60L * 1000L;
-
     private ReportDiagnostics() {}
 
-    static File create(Context context) throws IOException {
-        File directory = new File(context.getCacheDir(), DIRECTORY);
-        if (!directory.exists() && !directory.mkdirs()) throw new IOException("cannot create report cache");
-        removeOldReports(directory);
-        File report = new File(directory, "report-" + UUID.randomUUID() + ".txt");
-        try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(report), StandardCharsets.UTF_8)) {
-            writer.write("Libre SMS Backup diagnostic report\n");
-            writer.write("report_format=1\n");
-            writer.write("app_version=" + safe(BuildConfig.VERSION_NAME) + "\n");
-            writer.write("android_api=" + Build.VERSION.SDK_INT + "\n");
-            writer.write("language=" + safe(Locale.getDefault().toLanguageTag()) + "\n");
-            writer.write("sms_scope=" + BackupOptions.includeSms(context) + "\n");
-            writer.write("call_scope=" + BackupOptions.includeCalls(context) + "\n");
-            writer.write("encrypted_backups=" + BackupOptions.encrypted(context) + "\n");
-            writer.write("scheduled_backups=" + ScheduleManager.enabled(context) + "\n");
-            writer.write("last_scheduled_error=" + safe(ScheduleManager.prefs(context).getString("last_error", "")) + "\n");
-            writer.write("last_manual_error=" + safe(ScheduleManager.prefs(context).getString("manual_last_error", "")) + "\n");
-        }
-        return report;
-    }
-
-    private static void removeOldReports(File directory) {
-        File[] files = directory.listFiles((file, name) -> name.startsWith("report-") && name.endsWith(".txt"));
-        if (files == null) return;
-        long cutoff = System.currentTimeMillis() - MAX_AGE_MS;
-        for (File file : files) if (file.lastModified() < cutoff) file.delete();
+    static String create(Context context) {
+        StringBuilder report = new StringBuilder();
+        report.append("Libre SMS Backup diagnostic report\n");
+        report.append("report_format=1\n");
+        report.append("app_version=").append(safe(BuildConfig.VERSION_NAME)).append('\n');
+        report.append("android_api=").append(Build.VERSION.SDK_INT).append('\n');
+        report.append("language=").append(safe(Locale.getDefault().toLanguageTag())).append('\n');
+        report.append("sms_scope=").append(BackupOptions.includeSms(context)).append('\n');
+        report.append("call_scope=").append(BackupOptions.includeCalls(context)).append('\n');
+        report.append("encrypted_backups=").append(BackupOptions.encrypted(context)).append('\n');
+        report.append("scheduled_backups=").append(ScheduleManager.enabled(context)).append('\n');
+        report.append("last_scheduled_error=")
+                .append(safe(ScheduleManager.prefs(context).getString("last_error", ""))).append('\n');
+        report.append("last_manual_error=")
+                .append(safe(ScheduleManager.prefs(context).getString("manual_last_error", ""))).append('\n');
+        return report.toString();
     }
 
     private static String safe(String value) {

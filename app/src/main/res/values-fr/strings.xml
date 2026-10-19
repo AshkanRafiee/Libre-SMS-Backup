@@ -124,12 +124,11 @@
     <string name="about_footer">Libre SMS Backup · Édition %1$s</string>
     <string name="about_no_browser">Aucun navigateur disponible</string>
     <string name="report_issue_title">Signaler un problème</string>
-    <string name="report_issue_consent_message">Voulez-vous joindre des diagnostics techniques anonymisés ? Ils contiennent des détails sur l’application et Android ainsi que l’état d’erreur nettoyé, mais jamais de messages, numéros, contacts, mots de passe, sauvegardes ou chemins de stockage. Le texte de votre e-mail ne sera partagé qu’après votre choix. Vous pouvez signaler le problème sans diagnostic.</string>
+    <string name="report_issue_consent_message">Voulez-vous ajouter des diagnostics techniques anonymisés à la fin de l’e-mail ? Ils contiennent des détails sur l’application et Android ainsi que l’état d’erreur nettoyé, mais jamais de messages, numéros, contacts, mots de passe, sauvegardes ou chemins de stockage. Le texte de votre e-mail ne sera partagé qu’après votre choix. Vous pouvez signaler le problème sans diagnostic.</string>
     <string name="report_issue_with_diagnostics">Joindre les diagnostics</string>
     <string name="report_issue_without_diagnostics">Sans diagnostic</string>
     <string name="report_issue_subject">Rapport de problème Libre SMS Backup</string>
     <string name="report_issue_body">Bonjour l’équipe Libre SMS Backup,\n\nDescription du problème :\n[Décrivez ce qui s’est passé]\n\nRésultat attendu :\n[Qu’attendiez-vous ?]\n\nÉtapes pour reproduire le problème :\n1.\n2.\n3.\n\nDétails supplémentaires :\n[Ajoutez des détails non sensibles]\n\nJ’ai supprimé les informations privées avant l’envoi.</string>
-    <string name="report_issue_attachment_label">Diagnostics</string>
     <string name="report_issue_share_title">Envoyer le rapport</string>
     <string name="report_issue_no_app">Aucune application d’e-mail ou de partage n’est disponible.</string>
     <string name="retention_dialog_title">Politique de conservation</string>

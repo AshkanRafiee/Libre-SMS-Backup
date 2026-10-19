@@ -128,12 +128,11 @@
     <string name="about_footer">Libre SMS Backup · Sürüm %1$s</string>
     <string name="about_no_browser">Kullanılabilir tarayıcı yok</string>
     <string name="report_issue_title">Sorun bildir</string>
-    <string name="report_issue_consent_message">Anonimleştirilmiş teknik tanılamaları eklemek ister misiniz? Uygulama ve Android ayrıntıları ile temizlenmiş hata durumunu içerir; ancak mesajları, telefon numaralarını, kişileri, parolaları, yedekleri veya depolama yollarını asla içermez. E-posta metniniz yalnızca bir uygulama seçtikten sonra paylaşılır. Tanılama olmadan da bildirim yapabilirsiniz.</string>
+    <string name="report_issue_consent_message">Anonimleştirilmiş teknik tanılamaları e-postanın sonuna eklemek ister misiniz? Uygulama ve Android ayrıntıları ile temizlenmiş hata durumunu içerir; ancak mesajları, telefon numaralarını, kişileri, parolaları, yedekleri veya depolama yollarını asla içermez. E-posta metniniz yalnızca bir uygulama seçtikten sonra paylaşılır. Tanılama olmadan da bildirim yapabilirsiniz.</string>
     <string name="report_issue_with_diagnostics">Tanılamaları ekle</string>
     <string name="report_issue_without_diagnostics">Tanılama olmadan</string>
     <string name="report_issue_subject">Libre SMS Backup sorun bildirimi</string>
     <string name="report_issue_body">Merhaba Libre SMS Backup ekibi,\n\nSorun açıklaması:\n[Ne olduğunu açıklayın]\n\nBeklenen sonuç:\n[Ne olmasını bekliyordunuz?]\n\nYeniden oluşturma adımları:\n1.\n2.\n3.\n\nEk ayrıntılar:\n[Hassas olmayan ayrıntılar ekleyin]\n\nGöndermeden önce özel bilgileri kaldırdım.</string>
-    <string name="report_issue_attachment_label">Tanılama</string>
     <string name="report_issue_share_title">Sorun bildirimini gönder</string>
     <string name="report_issue_no_app">Kullanılabilir e-posta veya paylaşım uygulaması yok.</string>
     <string name="retention_dialog_title">Saklama ilkesi</string>

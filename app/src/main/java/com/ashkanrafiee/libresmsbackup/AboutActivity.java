@@ -2,7 +2,6 @@ package com.ashkanrafiee.libresmsbackup;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -17,8 +16,6 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import java.io.File;
 
 /** Transparent project information and privacy page. */
 public class AboutActivity extends Activity {
@@ -107,32 +104,22 @@ public class AboutActivity extends Activity {
     }
 
     private void shareReport(boolean includeDiagnostics) {
-        Uri attachment = null;
+        String body = getString(R.string.report_issue_body);
         try {
             if (includeDiagnostics) {
-                File report = ReportDiagnostics.create(this);
-                attachment = ReportFileProvider.uriFor(report, getPackageName() + ".report-files");
+                body += "\n\n--- Anonymized diagnostics ---\n" + ReportDiagnostics.create(this);
             }
             Intent share = new Intent(Intent.ACTION_SEND).setType("text/plain")
                     .putExtra(Intent.EXTRA_EMAIL, new String[]{CONTACT_EMAIL})
                     .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.report_issue_subject))
-                    .putExtra(Intent.EXTRA_TEXT, getString(R.string.report_issue_body));
-            if (attachment != null) {
-                share.putExtra(Intent.EXTRA_STREAM, attachment)
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        .setClipData(ClipData.newRawUri(getString(R.string.report_issue_attachment_label), attachment));
-            }
+                    .putExtra(Intent.EXTRA_TEXT, body);
             Intent chooser = Intent.createChooser(share, getString(R.string.report_issue_share_title));
-            if (attachment != null) {
-                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        .setClipData(ClipData.newRawUri(getString(R.string.report_issue_attachment_label), attachment));
-            }
             startActivity(chooser);
         } catch (Exception shareError) {
             try {
                 Intent email = new Intent(Intent.ACTION_SENDTO, Uri.parse(CONTACT))
                         .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.report_issue_subject))
-                        .putExtra(Intent.EXTRA_TEXT, getString(R.string.report_issue_body));
+                        .putExtra(Intent.EXTRA_TEXT, body);
                 startActivity(email);
             } catch (Exception emailError) {
                 Toast.makeText(this, getString(R.string.report_issue_no_app), Toast.LENGTH_LONG).show();

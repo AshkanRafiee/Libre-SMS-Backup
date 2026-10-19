@@ -188,12 +188,11 @@
     <string name="about_footer">Libre SMS Backup · Version %1$s</string>
     <string name="about_no_browser">No browser available</string>
     <string name="report_issue_title">Report a problem</string>
-    <string name="report_issue_consent_message">Would you like to include anonymized technical diagnostics? They contain app and Android details and sanitized error state, but never messages, phone numbers, contacts, passwords, backup files, or storage paths. Your email text is shared only after you choose an app. You can report without diagnostics.</string>
+    <string name="report_issue_consent_message">Would you like to add anonymized technical diagnostics at the end of the email? They contain app and Android details and sanitized error state, but never messages, phone numbers, contacts, passwords, backup files, or storage paths. Your email text is shared only after you choose an app. You can report without diagnostics.</string>
     <string name="report_issue_with_diagnostics">Include diagnostics</string>
     <string name="report_issue_without_diagnostics">Without diagnostics</string>
     <string name="report_issue_subject">Libre SMS Backup problem report</string>
     <string name="report_issue_body">Hello Libre SMS Backup team,\n\nProblem description:\n[Describe what happened]\n\nExpected result:\n[What did you expect?]\n\nSteps to reproduce:\n1.\n2.\n3.\n\nAdditional details:\n[Add non-sensitive details]\n\nI have removed private information before sending.</string>
-    <string name="report_issue_attachment_label">Diagnostics</string>
     <string name="report_issue_share_title">Send issue report</string>
     <string name="report_issue_no_app">No email or sharing app is available.</string>
     <string name="retention_dialog_title">Retention policy</string>
