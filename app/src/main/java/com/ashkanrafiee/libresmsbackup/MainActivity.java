@@ -1243,10 +1243,7 @@ public class MainActivity extends Activity {
                         .putLong("manual_last_success", System.currentTimeMillis())
                         .remove("manual_last_error").apply();
                 runOnUiThread(() -> {
-                    String completed = summary.mmsCount > 0 || summary.rcsCount > 0
-                            ? getString(R.string.backup_summary_extended, summary.smsCount, summary.callCount,
-                            summary.mmsCount, summary.rcsCount)
-                            : getString(R.string.backup_summary, summary.smsCount, summary.callCount);
+                    String completed = BackupSummaryFormatter.format(this, summary);
                     setBusy(false, completed);
                     Toast.makeText(this, getString(R.string.notice_backup_complete_title), Toast.LENGTH_SHORT).show();
                     if (BackupOptions.includeRestrictedMessages(this)

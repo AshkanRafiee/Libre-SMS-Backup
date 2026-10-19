@@ -54,7 +54,6 @@
     <string name="scheduled_error_encryption">تعذّر تحميل كلمة مرور التشفير للنسخة المجدولة</string>
     <string name="notification_channel">النسخ الاحتياطية التلقائية</string>
     <string name="notification_backup_complete_title">اكتملت النسخة الاحتياطية التلقائية</string>
-    <string name="notification_backup_complete_body">تم حفظ نسختك الاحتياطية التلقائية.</string>
     <string name="notification_backup_failed_title">النسخة الاحتياطية التلقائية تتطلب الانتباه</string>
     <string name="notification_backup_failed_body">افتح Libre SMS Backup للتحقق من إعدادات النسخ الاحتياطي.</string>
     <string name="battery_nudge_title">اجعل النسخ التلقائية أكثر موثوقية</string>

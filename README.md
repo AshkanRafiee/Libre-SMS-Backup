@@ -7,6 +7,7 @@ Libre SMS Backup is a free, open-source Android app for keeping SMS messages and
 - **Lossless enough to travel:** SMS, MMS, and call data are captured in a versioned JSON payload instead of being flattened into a chat transcript; RCS capture is best effort when the device exposes a compatible provider.
 - **Safe restore:** encrypted archives are authenticated before any phone data is changed; explicitly unencrypted archives are clearly identified, and existing records are skipped instead of duplicated.
 - **Comfortable to use:** choose the system, light, or dark theme and app language from the Display menu.
+- **Scheduled visibility:** completion notifications show how many SMS and call records were saved, including MMS and RCS when present.
 - **Controlled storage:** manual and scheduled backups share one SAF backup location with configurable retention.
 - **FLOSS:** released under GPL-3.0-only.
 

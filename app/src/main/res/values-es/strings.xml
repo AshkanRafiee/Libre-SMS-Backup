@@ -54,7 +54,6 @@
     <string name="scheduled_error_encryption">no se pudo cargar la contraseña de cifrado de la copia programada</string>
     <string name="notification_channel">Copias automáticas</string>
     <string name="notification_backup_complete_title">Copia automática completada</string>
-    <string name="notification_backup_complete_body">Tu copia automática se ha guardado.</string>
     <string name="notification_backup_failed_title">La copia automática requiere atención</string>
     <string name="notification_backup_failed_body">Abre Libre SMS Backup para comprobar los ajustes de copia.</string>
     <string name="battery_nudge_title">Haz que las copias programadas sean fiables</string>

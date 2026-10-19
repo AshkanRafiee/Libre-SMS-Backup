@@ -54,7 +54,6 @@
     <string name="scheduled_error_encryption">بارگذاری رمز عبور رمزگذاری برای پشتیبان زمان‌بندی‌شده ممکن نبود</string>
     <string name="notification_channel">پشتیبان‌گیری‌های خودکار</string>
     <string name="notification_backup_complete_title">پشتیبان‌گیری خودکار کامل شد</string>
-    <string name="notification_backup_complete_body">پشتیبان‌گیری خودکار شما ذخیره شد.</string>
     <string name="notification_backup_failed_title">پشتیبان‌گیری خودکار به توجه نیاز دارد</string>
     <string name="notification_backup_failed_body">برای بررسی تنظیمات پشتیبان‌گیری، Libre SMS Backup را باز کنید.</string>
     <string name="battery_nudge_title">پشتیبان‌گیری‌های خودکار را مطمئن‌تر کنید</string>

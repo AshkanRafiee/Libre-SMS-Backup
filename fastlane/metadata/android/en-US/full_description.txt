@@ -5,6 +5,7 @@ Libre SMS Backup keeps your SMS, MMS, and call records under your control.
 • One portable file: capture selected SMS messages, MMS, and/or call logs together; accessible RCS data is captured on a best-effort basis.
 • Safe restore: encrypted archives are authenticated before phone data changes; unencrypted archives are clearly identified.
 • Duplicate-aware: existing records are skipped instead of copied again.
+• Scheduled backup notifications show how many records were saved in each run.
 • Display choices: use the system theme, light theme, or dark theme.
 • Free and open source under GPL-3.0-only.
 

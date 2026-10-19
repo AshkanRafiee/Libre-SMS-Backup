@@ -54,7 +54,6 @@
     <string name="scheduled_error_encryption">le mot de passe de chiffrement de la sauvegarde planifiée n’a pas pu être chargé</string>
     <string name="notification_channel">Sauvegardes automatiques</string>
     <string name="notification_backup_complete_title">Sauvegarde automatique terminée</string>
-    <string name="notification_backup_complete_body">Votre sauvegarde automatique a été enregistrée.</string>
     <string name="notification_backup_failed_title">La sauvegarde automatique nécessite votre attention</string>
     <string name="notification_backup_failed_body">Ouvrez Libre SMS Backup pour vérifier les paramètres de sauvegarde.</string>
     <string name="battery_nudge_title">Fiabiliser les sauvegardes automatiques</string>

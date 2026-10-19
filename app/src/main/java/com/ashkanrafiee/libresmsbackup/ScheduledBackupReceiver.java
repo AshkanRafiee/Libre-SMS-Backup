@@ -117,7 +117,7 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
                 if (cancelled(context)) return;
                 ScheduleManager.prune(context);
                 ScheduleManager.prefs(context).edit().putLong("last_success", System.currentTimeMillis()).remove("last_error").apply();
-                notifyUser(context, true, context.getString(R.string.notification_backup_complete_body), null);
+                notifyUser(context, true, BackupSummaryFormatter.format(context, summary), null);
             }
         } catch (Exception error) {
             if (!published) deleteDestination(context, destination);

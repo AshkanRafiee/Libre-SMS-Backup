@@ -58,7 +58,6 @@
     <string name="scheduled_error_encryption">无法加载计划备份的加密密码</string>
     <string name="notification_channel">自动备份</string>
     <string name="notification_backup_complete_title">自动备份完成</string>
-    <string name="notification_backup_complete_body">您的自动备份已保存。</string>
     <string name="notification_backup_failed_title">自动备份需要注意</string>
     <string name="notification_backup_failed_body">请打开 Libre SMS Backup 检查备份设置。</string>
     <string name="battery_nudge_title">让自动备份更可靠</string>

@@ -54,7 +54,6 @@
     <string name="scheduled_error_encryption">Das Verschlüsselungspasswort für das geplante Backup konnte nicht geladen werden.</string>
     <string name="notification_channel">Automatische Backups</string>
     <string name="notification_backup_complete_title">Automatisches Backup abgeschlossen</string>
-    <string name="notification_backup_complete_body">Dein automatisches Backup wurde gespeichert.</string>
     <string name="notification_backup_failed_title">Automatisches Backup erfordert Aufmerksamkeit</string>
     <string name="notification_backup_failed_body">Öffne Libre SMS Backup, um die Backup-Einstellungen zu prüfen.</string>
     <string name="battery_nudge_title">Automatische Backups zuverlässiger machen</string>

@@ -88,7 +88,6 @@
     <string name="scheduled_error_scope">automatic backups need at least one selected type of record</string>
     <string name="notification_channel">Automatic backups</string>
     <string name="notification_backup_complete_title">Automatic backup complete</string>
-    <string name="notification_backup_complete_body">Your automatic backup was saved.</string>
     <string name="notification_backup_failed_title">Automatic backup needs attention</string>
     <string name="notification_backup_failed_body">Open Libre SMS Backup to check the backup settings.</string>
     <string name="schedule_exact_needed">Allow exact alarms so automatic backups can run at the selected time.</string>

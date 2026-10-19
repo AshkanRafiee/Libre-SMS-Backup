@@ -58,7 +58,6 @@
     <string name="scheduled_error_encryption">zamanlanmış yedeklemenin şifreleme parolası yüklenemedi</string>
     <string name="notification_channel">Otomatik yedeklemeler</string>
     <string name="notification_backup_complete_title">Otomatik yedekleme tamamlandı</string>
-    <string name="notification_backup_complete_body">Otomatik yedeklemeniz kaydedildi.</string>
     <string name="notification_backup_failed_title">Otomatik yedekleme için dikkat gerekiyor</string>
     <string name="notification_backup_failed_body">Yedekleme ayarlarını kontrol etmek için Libre SMS Backup uygulamasını açın.</string>
     <string name="battery_nudge_title">Otomatik yedeklemeleri güvenilir hâle getirin</string>
