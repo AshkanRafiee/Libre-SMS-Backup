@@ -23,7 +23,7 @@ The app never stores your backup password as plain text. When encryption is enab
 
 ## Build
 
-Requirements: Android SDK 36 and JDK 17.
+Requirements: Android SDK 36 and JDK 17 or newer (releases are built with JDK 21).
 
 ```bash
 ./gradlew assembleDebug

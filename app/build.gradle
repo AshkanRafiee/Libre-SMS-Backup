@@ -16,6 +16,7 @@ android {
     }
 
     buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     lint { checkReleaseBuilds true; abortOnError true }
 
     dependenciesInfo { includeInApk = false; includeInBundle = false }
@@ -48,12 +49,6 @@ android {
     testOptions { managedDevices { localDevices { "pixel_6" { apiLevel = 36 } } } }
 
     bundle { language { enableSplit = false } }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    javaCompiler.set(javaToolchains.compilerFor {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    })
 }
 
 dependencies {
