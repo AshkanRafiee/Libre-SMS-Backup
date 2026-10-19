@@ -39,6 +39,28 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Validate release signing secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.LIBRESMSBACKUP_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.LIBRESMSBACKUP_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "${KEYSTORE_BASE64:-}" ]] || missing+=(LIBRESMSBACKUP_KEYSTORE_BASE64)
+          [[ -n "${KEYSTORE_PASSWORD:-}" ]] || missing+=(LIBRESMSBACKUP_KEYSTORE_PASSWORD)
+          [[ -n "${KEY_ALIAS:-}" ]] || missing+=(LIBRESMSBACKUP_KEY_ALIAS)
+          [[ -n "${KEY_PASSWORD:-}" ]] || missing+=(LIBRESMSBACKUP_KEY_PASSWORD)
+          if ((${#missing[@]} > 0)); then
+            echo "::error title=Missing release signing secrets::Add the missing names in Settings > Environments > release."
+            printf 'Missing: %s\n' "${missing[*]}"
+            exit 1
+          fi
+          if ! printf '%s' "$KEYSTORE_BASE64" | base64 --decode >/dev/null 2>&1; then
+            echo "::error title=Invalid keystore secret::LIBRESMSBACKUP_KEYSTORE_BASE64 is not valid base64."
+            exit 1
+          fi
       - name: Restore production signing files
         env:
           KEYSTORE_BASE64: ${{ secrets.LIBRESMSBACKUP_KEYSTORE_BASE64 }}
