@@ -226,5 +226,4 @@
         <item quantity="other">%1$d sets</item>
     </plurals>
     <string name="status_detail_error">%1$s: %2$s</string>
-    <string name="about_privacy_label">Privacy policy</string>
 </resources>

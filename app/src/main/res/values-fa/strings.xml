@@ -226,5 +226,4 @@
     <string name="restricted_switch_back_message">برنامهٔ Libre SMS Backup هنوز برنامهٔ پیش‌فرض پیامک شماست. برای باز کردن صفحهٔ برنامه‌های پیش‌فرض Android ادامه دهید و برنامهٔ پیامک معمول خود را دوباره انتخاب کنید.</string>
     <string name="restricted_switch_back_action">باز کردن برنامه‌های پیش‌فرض</string>
     <string name="status_detail_error">%1$s: %2$s</string>
-    <string name="about_privacy_label">سیاست حفظ حریم خصوصی</string>
 </resources>

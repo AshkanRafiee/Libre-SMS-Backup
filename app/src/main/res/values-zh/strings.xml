@@ -226,5 +226,4 @@
     <string name="restricted_switch_back_message">Libre SMS Backup 仍是默认短信应用。继续打开 Android 的默认应用页面，然后重新选择常用的短信应用。</string>
     <string name="restricted_switch_back_action">打开默认应用</string>
     <string name="status_detail_error">%1$s：%2$s</string>
-    <string name="about_privacy_label">隐私政策</string>
 </resources>

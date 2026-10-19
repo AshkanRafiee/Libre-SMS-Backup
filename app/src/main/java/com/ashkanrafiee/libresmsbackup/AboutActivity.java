@@ -24,7 +24,6 @@ public class AboutActivity extends Activity {
     private static final String ISSUES = SOURCE + "/issues";
     private static final String CONTACT_EMAIL = "libresmsbackup.eject095@passmail.net";
     private static final String CONTACT = "mailto:" + CONTACT_EMAIL;
-    private static final String PRIVACY = SOURCE + "/blob/main/PRIVACY.md";
     private static final String DONATION = WEBSITE + "#donate";
 
     private int dp(float value) { return (int) (value * getResources().getDisplayMetrics().density + .5f); }
@@ -74,7 +73,6 @@ public class AboutActivity extends Activity {
          body.addView(info(getString(R.string.about_suggestions_label), "github.com/AshkanRafiee/Libre-SMS-Backup/issues", v -> open(ISSUES)), margins(0, 0, 0, 6));
          body.addView(info(getString(R.string.about_report_issue_label), getString(R.string.about_report_issue_value), v -> showReportDialog()), margins(0, 0, 0, 6));
          body.addView(info(getString(R.string.about_contact_label), "libresmsbackup.eject095@passmail.net", v -> open(CONTACT)), margins(0, 0, 0, 6));
-        body.addView(info(getString(R.string.about_privacy_label), "github.com/AshkanRafiee/Libre-SMS-Backup/PRIVACY.md", v -> open(PRIVACY)), margins(0, 0, 0, 6));
         body.addView(info(getString(R.string.about_donate_label), "libresmsbackup.ashkanrafiee.com/#donate", v -> open(DONATION)), margins(0, 0, 0, 14));
         TextView footer = text(getString(R.string.about_footer, BuildConfig.VERSION_NAME), 11, color(R.color.text_tertiary)); footer.setGravity(Gravity.CENTER); body.addView(footer);
     }

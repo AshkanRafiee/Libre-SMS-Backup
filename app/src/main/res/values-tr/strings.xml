@@ -226,5 +226,4 @@
     <string name="restricted_switch_back_message">Libre SMS Backup hâlâ varsayılan SMS uygulamanız. Android Varsayılan uygulamalar sayfasını açmak ve normal SMS uygulamanızı yeniden seçmek için Devam edin.</string>
     <string name="restricted_switch_back_action">Varsayılan uygulamaları aç</string>
     <string name="status_detail_error">%1$s: %2$s</string>
-    <string name="about_privacy_label">Gizlilik politikası</string>
 </resources>

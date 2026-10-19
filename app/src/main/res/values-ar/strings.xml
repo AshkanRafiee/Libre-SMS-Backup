@@ -230,5 +230,4 @@
     <string name="restricted_switch_back_message">لا يزال Libre SMS Backup تطبيق الرسائل الافتراضي لديك. تابع لفتح صفحة التطبيقات الافتراضية في Android واختر تطبيق الرسائل المعتاد مجددًا.</string>
     <string name="restricted_switch_back_action">فتح التطبيقات الافتراضية</string>
     <string name="status_detail_error">%1$s: %2$s</string>
-    <string name="about_privacy_label">سياسة الخصوصية</string>
 </resources>

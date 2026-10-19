@@ -226,5 +226,4 @@
     <string name="restricted_switch_back_message">Libre SMS Backup est toujours votre application SMS par défaut. Continuez pour ouvrir la page des applications par défaut d’Android et choisissez à nouveau votre application SMS habituelle.</string>
     <string name="restricted_switch_back_action">Ouvrir les applications par défaut</string>
     <string name="status_detail_error">%1$s : %2$s</string>
-    <string name="about_privacy_label">Politique de confidentialité</string>
 </resources>
