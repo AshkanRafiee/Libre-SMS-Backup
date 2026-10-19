@@ -158,6 +158,8 @@
     <string name="restore_switch_back_action">Choose previous SMS app</string>
     <string name="restore_switch_back_later">Later</string>
     <string name="restore_switch_back_not_done">Libre SMS Backup is still the default SMS app. You can switch back from Default apps in Android Settings.</string>
+    <string name="restore_failed_switch_back_title">Restore stopped</string>
+    <string name="restore_failed_switch_back_message">The restore could not be completed. Libre SMS Backup is still your default SMS app because it was needed for this attempt. Choose your previous SMS app now.</string>
     <string name="restricted_default_sms_title">Allow access to restricted messages</string>
     <string name="restricted_default_sms_message">Android only lets the default SMS app read some restricted messages. Libre SMS Backup needs to become your default SMS app temporarily to include them in this backup. Avoid receiving new MMS while it holds that role because incoming MMS delivery is not handled. You can choose your usual SMS app again after the backup.</string>
     <string name="restricted_default_sms_action">Choose Libre SMS Backup</string>

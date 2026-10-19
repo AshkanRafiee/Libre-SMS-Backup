@@ -19,8 +19,9 @@ or archive contents to the project or any third party.
 From the About screen, you may create an issue report. Before sharing, the app
 asks whether to add an optional diagnostic section at the end of the email. That
 section contains only an allow-listed app version, Android version, language,
-feature state, and sanitized error state. It contains no messages, phone numbers,
-contacts, passwords, archives, storage paths, or device identifiers. You can
+device model, ROM/build information, feature state, and sanitized error state.
+It contains no messages, phone numbers, contacts, passwords, archives, storage
+paths, or unique device identifiers. You can
 also choose to share only the report template without diagnostics. Nothing is
 sent automatically; the email or sharing app you choose controls what leaves
 the device, including any text you add.

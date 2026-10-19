@@ -16,7 +16,7 @@ android {
     }
 
     buildFeatures { buildConfig true }
-    lint { checkReleaseBuilds false; abortOnError false }
+    lint { checkReleaseBuilds true; abortOnError true }
 
     dependenciesInfo { includeInApk = false; includeInBundle = false }
 
@@ -46,6 +46,8 @@ android {
     }
 
     testOptions { managedDevices { localDevices { "pixel_6" { apiLevel = 36 } } } }
+
+    bundle { language { enableSplit = false } }
 }
 
 tasks.withType(JavaCompile).configureEach {

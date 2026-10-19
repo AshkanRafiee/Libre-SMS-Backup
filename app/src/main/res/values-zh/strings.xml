@@ -189,6 +189,8 @@
     <string name="restore_switch_back_action">选择之前的短信应用</string>
     <string name="restore_switch_back_later">稍后</string>
     <string name="restore_switch_back_not_done">Libre SMS Backup 仍是默认短信应用。您可以在 Android 设置的默认应用中切换回来。</string>
+    <string name="restore_failed_switch_back_title">恢复已停止</string>
+    <string name="restore_failed_switch_back_message">恢复未能完成。由于本次恢复需要 Libre SMS Backup，它仍是默认短信应用。现在请选择之前的短信应用。</string>
     <string name="backup_unencrypted_title">创建未加密的备份？</string>
     <string name="backup_unencrypted_message">此存档无需密码即可读取。若要保护它，请先启用加密。</string>
     <string name="backup_unencrypted_action">不加密创建</string>

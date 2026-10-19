@@ -185,6 +185,8 @@
     <string name="restore_switch_back_action">Choisir l’application SMS précédente</string>
     <string name="restore_switch_back_later">Plus tard</string>
     <string name="restore_switch_back_not_done">Libre SMS Backup est toujours l’application SMS par défaut. Vous pouvez revenir en arrière dans les applications par défaut des réglages Android.</string>
+    <string name="restore_failed_switch_back_title">Restauration interrompue</string>
+    <string name="restore_failed_switch_back_message">La restauration n’a pas pu être terminée. Libre SMS Backup est toujours l’application SMS par défaut car elle était nécessaire pour cette tentative. Choisissez maintenant votre ancienne application SMS.</string>
     <string name="backup_unencrypted_title">Créer une sauvegarde non chiffrée ?</string>
     <string name="backup_unencrypted_message">Cette archive sera lisible sans mot de passe. Activez d’abord le chiffrement si vous souhaitez la protéger.</string>
     <string name="backup_unencrypted_action">Créer sans chiffrement</string>

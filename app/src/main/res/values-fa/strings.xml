@@ -185,6 +185,8 @@
     <string name="restore_switch_back_action">انتخاب برنامه پیامک قبلی</string>
     <string name="restore_switch_back_later">بعداً</string>
     <string name="restore_switch_back_not_done">برنامهٔ Libre SMS Backup هنوز برنامهٔ پیش‌فرض پیامک است. می‌توانید از برنامه‌های پیش‌فرض در تنظیمات Android برگردید.</string>
+    <string name="restore_failed_switch_back_title">بازیابی متوقف شد</string>
+    <string name="restore_failed_switch_back_message">بازیابی کامل نشد. Libre SMS Backup هنوز برنامهٔ پیش‌فرض پیامک است چون برای این تلاش لازم بود. اکنون برنامهٔ پیامک قبلی خود را انتخاب کنید.</string>
     <string name="backup_unencrypted_title">یک پشتیبان بدون رمزگذاری ایجاد شود؟</string>
     <string name="backup_unencrypted_message">این بایگانی بدون رمز عبور قابل خواندن خواهد بود. اگر می‌خواهید از آن محافظت کنید، ابتدا رمزگذاری را فعال کنید.</string>
     <string name="backup_unencrypted_action">ایجاد بدون رمزگذاری</string>

@@ -730,13 +730,14 @@ public class MainActivity extends Activity {
 
     private void openEncryptionSetup(Runnable afterSaved) {
         if (encryptionSwitch == null) return;
-        if (!BackupOptions.encrypted(this)) {
+        boolean wasEncrypted = BackupOptions.encrypted(this);
+        if (!wasEncrypted) {
             changingEncryption = true;
             encryptionSwitch.setChecked(true);
             changingEncryption = false;
         }
         if (!EncryptionPassword.isUsable(this)) {
-            askManualEncryptionPassword(afterSaved == null ? () -> {} : afterSaved, true);
+            askManualEncryptionPassword(afterSaved == null ? () -> {} : afterSaved, !wasEncrypted);
         } else if (afterSaved != null) {
             afterSaved.run();
         }
@@ -1440,6 +1441,8 @@ public class MainActivity extends Activity {
                     pendingRestoreAfterSmsRole = true;
                     temporarilyChangedSmsRole = true;
                     getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit()
+                            .putBoolean("switch_back_pending", true)
+                            .putString("switch_back_reason", "restore_failed")
                             .putString("previous_package", previousSmsPackage).apply();
                     if (!requestDefaultSmsRole()) {
                         cancelPendingSmsRestore();
@@ -1451,13 +1454,21 @@ public class MainActivity extends Activity {
     }
 
     private void cancelPendingSmsRestore() {
+        boolean needsSwitchBack = temporarilyChangedSmsRole && isDefaultSmsApp();
         pendingRestoreAfterSmsRole = false;
         pendingRestoreSms = false;
         pendingRestoreCalls = false;
         pendingRestoreWritePermission = false;
         temporarilyChangedSmsRole = false;
         previousSmsPackage = null;
-        getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit().clear().apply();
+        SharedPreferences.Editor roleEditor = getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit();
+        if (needsSwitchBack) {
+            roleEditor.putBoolean("switch_back_pending", true)
+                    .putString("switch_back_reason", "restore_failed");
+        } else {
+            roleEditor.clear();
+        }
+        roleEditor.apply();
         if (pendingRestore != null) closePendingRestore(pendingRestore);
     }
 
@@ -1591,10 +1602,13 @@ public class MainActivity extends Activity {
         String reason = rolePrefs.getString("switch_back_reason", "restore");
         boolean backup = "backup".equals(reason);
         boolean restricted = "restricted".equals(reason);
+        boolean failed = "restore_failed".equals(reason);
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(getString(backup ? R.string.backup_switch_back_title
+                .setTitle(getString(failed ? R.string.restore_failed_switch_back_title
+                        : backup ? R.string.backup_switch_back_title
                         : restricted ? R.string.restricted_switch_back_title : R.string.restore_switch_back_title))
-                .setMessage(getString(backup ? R.string.backup_switch_back_message
+                .setMessage(getString(failed ? R.string.restore_failed_switch_back_message
+                        : backup ? R.string.backup_switch_back_message
                         : restricted ? R.string.restricted_switch_back_message : R.string.restore_switch_back_message))
                 .setNegativeButton(getString(R.string.restore_switch_back_later), null)
                 .setPositiveButton(getString(backup ? R.string.backup_switch_back_action
@@ -1668,7 +1682,14 @@ public class MainActivity extends Activity {
                 });
             } else {
                 runOnUiThread(() -> { setBusy(false, getString(R.string.error_generic));
-                    Toast.makeText(this, getString(R.string.notice_failed_title), Toast.LENGTH_LONG).show(); });
+                    Toast.makeText(this, getString(R.string.notice_failed_title), Toast.LENGTH_LONG).show();
+                    if (needsSmsSwitchBack && temporarilyChangedSmsRole && isDefaultSmsApp()) {
+                        getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit()
+                                .putBoolean("switch_back_pending", true)
+                                .putString("switch_back_reason", "restore_failed").apply();
+                        showSwitchBackDialog();
+                    }
+                });
             }
         });
     }

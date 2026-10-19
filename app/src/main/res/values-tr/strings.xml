@@ -189,6 +189,8 @@
     <string name="restore_switch_back_action">Önceki SMS uygulamasını seç</string>
     <string name="restore_switch_back_later">Daha sonra</string>
     <string name="restore_switch_back_not_done">Libre SMS Backup hâlâ varsayılan SMS uygulaması. Android Ayarları’ndaki Varsayılan uygulamalar bölümünden geri dönebilirsiniz.</string>
+    <string name="restore_failed_switch_back_title">Geri yükleme durduruldu</string>
+    <string name="restore_failed_switch_back_message">Geri yükleme tamamlanamadı. Bu deneme için gerektiğinden Libre SMS Backup hâlâ varsayılan SMS uygulamanız. Şimdi önceki SMS uygulamanızı seçin.</string>
     <string name="backup_unencrypted_title">Şifrelenmemiş yedek oluşturulsun mu?</string>
     <string name="backup_unencrypted_message">Bu arşiv parola olmadan okunabilir. Korumak istiyorsanız önce Şifreleme’yi etkinleştirin.</string>
     <string name="backup_unencrypted_action">Şifrelemeden oluştur</string>

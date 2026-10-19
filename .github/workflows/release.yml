@@ -4,11 +4,16 @@ on:
   release:
     types: [published]
 
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
 jobs:
   build:
+    if: github.event.release.prerelease != true
     runs-on: ubuntu-latest
     environment: release
     env:
@@ -20,14 +25,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Validate release tag
         run: |
           set -euo pipefail
           [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           version_name=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
+          version_code=$(sed -n 's/.*versionCode \([0-9][0-9]*\).*/\1/p' app/build.gradle)
           test -n "$version_name"
+          test -n "$version_code"
           test "$TAG_NAME" = "v$version_name"
+          test "$version_code" = 10000
       - name: Set up Java
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -118,11 +127,17 @@ jobs:
           keytool -list -keystore app/libresmsbackup-release.p12 \
             -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
       - name: Build signed release artifacts
-        run: bash ./gradlew clean assembleRelease bundleRelease
+        run: bash ./gradlew --no-daemon clean lintRelease assembleRelease bundleRelease
       - name: Verify APK signature
         run: >-
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify
           --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+      - name: Verify artifact metadata and AAB signature
+        run: |
+          set -euo pipefail
+          badging=$($ANDROID_HOME/build-tools/36.0.0/aapt2 dump badging app/build/outputs/apk/release/app-release.apk)
+          grep -F "package: name='com.ashkanrafiee.libresmsbackup' versionCode='10000' versionName='1.0.0'" <<< "$badging"
+          jarsigner -verify -strict app/build/outputs/bundle/release/app-release.aab
       - name: Create checksums
         run: |
           set -euo pipefail
@@ -163,6 +178,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          cd release-assets
+          sha256sum -c "Libre-SMS-Backup-${TAG_NAME}-SHA256SUMS"
+          cd ..
           gh release upload "$TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \

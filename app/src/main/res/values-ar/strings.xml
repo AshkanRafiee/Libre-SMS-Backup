@@ -189,6 +189,8 @@
     <string name="restore_switch_back_action">اختيار تطبيق الرسائل السابق</string>
     <string name="restore_switch_back_later">لاحقًا</string>
     <string name="restore_switch_back_not_done">لا يزال Libre SMS Backup تطبيق الرسائل الافتراضي. يمكنك التبديل من التطبيقات الافتراضية في إعدادات Android.</string>
+    <string name="restore_failed_switch_back_title">توقفت الاستعادة</string>
+    <string name="restore_failed_switch_back_message">تعذرت استعادة السجلات. لا يزال Libre SMS Backup تطبيق الرسائل الافتراضي لأنه كان مطلوبًا لهذه المحاولة. اختر تطبيق الرسائل السابق الآن.</string>
     <string name="backup_unencrypted_title">إنشاء نسخة احتياطية غير مشفّرة؟</string>
     <string name="backup_unencrypted_message">سيكون هذا الأرشيف قابلًا للقراءة دون كلمة مرور. فعّل التشفير أولًا إذا أردت حمايته.</string>
     <string name="backup_unencrypted_action">إنشاء دون تشفير</string>
