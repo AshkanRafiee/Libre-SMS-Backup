@@ -118,7 +118,6 @@
     <string name="about_website_label">Site web</string>
     <string name="about_suggestions_label">Idées</string>
     <string name="about_report_issue_label">Signaler un problème</string>
-    <string name="about_report_issue_value">Créer un e-mail avec diagnostic facultatif</string>
     <string name="about_donate_label">Faire un don</string>
     <string name="about_contact_label">Nous contacter</string>
     <string name="about_footer">Libre SMS Backup · Édition %1$s</string>

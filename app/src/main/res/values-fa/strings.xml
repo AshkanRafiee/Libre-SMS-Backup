@@ -118,7 +118,6 @@
     <string name="about_website_label">وب‌سایت</string>
     <string name="about_suggestions_label">پیشنهادها</string>
     <string name="about_report_issue_label">گزارش مشکل</string>
-    <string name="about_report_issue_value">ساخت ایمیل با گزارش فنی اختیاری</string>
     <string name="about_donate_label">حمایت مالی</string>
     <string name="about_contact_label">تماس</string>
     <string name="about_footer">نسخهٔ %1$s از Libre SMS Backup</string>

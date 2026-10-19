@@ -122,7 +122,6 @@
     <string name="about_website_label">官方网站</string>
     <string name="about_suggestions_label">意见反馈</string>
     <string name="about_report_issue_label">报告问题</string>
-    <string name="about_report_issue_value">创建带可选诊断信息的邮件</string>
     <string name="about_donate_label">捐赠</string>
     <string name="about_contact_label">联系方式</string>
     <string name="about_footer">Libre SMS Backup · 版本 %1$s</string>

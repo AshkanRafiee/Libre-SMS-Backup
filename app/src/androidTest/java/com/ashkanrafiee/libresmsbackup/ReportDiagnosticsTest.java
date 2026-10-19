@@ -15,7 +15,12 @@ public class ReportDiagnosticsTest extends TestCase {
         String content = ReportDiagnostics.create(context);
         assertTrue(content.contains("report_format=1"));
         assertTrue(content.contains("app_version="));
+        assertTrue(content.contains("android_version="));
         assertTrue(content.contains("android_api="));
+        assertTrue(content.contains("device="));
+        assertTrue(content.contains("rom="));
+        assertTrue(content.contains("build_number="));
+        assertTrue(content.contains("build_id="));
         assertFalse(content.contains("content://"));
         assertFalse(content.contains("/data/"));
         assertFalse(content.contains("READ_CONTACTS"));

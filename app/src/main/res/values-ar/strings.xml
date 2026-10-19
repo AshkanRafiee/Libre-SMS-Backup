@@ -118,7 +118,6 @@
     <string name="about_website_label">الموقع الإلكتروني</string>
     <string name="about_suggestions_label">اقتراحات</string>
     <string name="about_report_issue_label">الإبلاغ عن مشكلة</string>
-    <string name="about_report_issue_value">إنشاء بريد مع تشخيصات اختيارية</string>
     <string name="about_donate_label">تبرع</string>
     <string name="about_contact_label">اتصل بنا</string>
     <string name="about_footer">الإصدار %1$s من Libre SMS Backup</string>

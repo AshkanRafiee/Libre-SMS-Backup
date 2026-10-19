@@ -71,10 +71,14 @@ public class AboutActivity extends Activity {
         body.addView(info(getString(R.string.about_source_label), "github.com/AshkanRafiee/Libre-SMS-Backup", v -> open(SOURCE)), margins(0, 0, 0, 6));
          body.addView(info(getString(R.string.about_website_label), "libresmsbackup.ashkanrafiee.com", v -> open(WEBSITE)), margins(0, 0, 0, 6));
          body.addView(info(getString(R.string.about_suggestions_label), "github.com/AshkanRafiee/Libre-SMS-Backup/issues", v -> open(ISSUES)), margins(0, 0, 0, 6));
-         body.addView(info(getString(R.string.about_report_issue_label), getString(R.string.about_report_issue_value), v -> showReportDialog()), margins(0, 0, 0, 6));
          body.addView(info(getString(R.string.about_contact_label), "libresmsbackup.eject095@passmail.net", v -> open(CONTACT)), margins(0, 0, 0, 6));
-        body.addView(info(getString(R.string.about_donate_label), "libresmsbackup.ashkanrafiee.com/#donate", v -> open(DONATION)), margins(0, 0, 0, 14));
-        TextView footer = text(getString(R.string.about_footer, BuildConfig.VERSION_NAME), 11, color(R.color.text_tertiary)); footer.setGravity(Gravity.CENTER); body.addView(footer);
+         body.addView(info(getString(R.string.about_donate_label), "libresmsbackup.ashkanrafiee.com/#donate", v -> open(DONATION)), margins(0, 0, 0, 14));
+         TextView report = text(getString(R.string.about_report_issue_label), 12, color(R.color.link));
+         report.setGravity(Gravity.CENTER); report.setTypeface(null, Typeface.BOLD);
+         report.setPaintFlags(report.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
+         report.setPadding(0, dp(4), 0, dp(10)); report.setOnClickListener(v -> showReportDialog());
+         body.addView(report, new LinearLayout.LayoutParams(-1, -2));
+         TextView footer = text(getString(R.string.about_footer, BuildConfig.VERSION_NAME), 11, color(R.color.text_tertiary)); footer.setGravity(Gravity.CENTER); body.addView(footer);
     }
 
     private TextView text(String value, float size, int textColor) { TextView view = new TextView(this); view.setText(value); view.setTextSize(size); view.setTextColor(textColor); if (Build.VERSION.SDK_INT >= 17) view.setTextDirection(View.TEXT_DIRECTION_LOCALE); return view; }

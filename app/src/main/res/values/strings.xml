@@ -182,7 +182,6 @@
     <string name="about_website_label">Website</string>
     <string name="about_suggestions_label">Suggestions</string>
     <string name="about_report_issue_label">Report a problem</string>
-    <string name="about_report_issue_value">Create an email with optional diagnostics</string>
     <string name="about_donate_label">Donate</string>
     <string name="about_contact_label">Contact</string>
     <string name="about_footer">Libre SMS Backup · Version %1$s</string>
