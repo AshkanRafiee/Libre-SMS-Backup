@@ -10,8 +10,8 @@ android {
         minSdk 26
         targetSdk 36
         // versionCode = major * 10000 + minor * 1000 + patch
-        versionCode 10001
-        versionName '1.0.1'
+        versionCode 10002
+        versionName '1.0.2'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -41,7 +41,10 @@ android {
     buildTypes {
         release {
             if (signingValues['storeFile']) signingConfig signingConfigs.release
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
             vcsInfo { include = false }
         }
     }
