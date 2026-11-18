@@ -1,40 +1,46 @@
-# Libre SMS Backup
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/icon.png" width="88" alt="Libre SMS Backup icon">
+</p>
 
-Libre SMS Backup is a free, open-source Android app for keeping your SMS, MMS, RCS, and call records under your control. It supports Android 8.0 (API 26) and newer.
+<h1 align="center">Libre SMS Backup</h1>
 
-- **Local-first:** no account, cloud sync, analytics, tracker, or Internet permission.
-- **Flexible backup scope:** choose SMS and available MMS/RCS records, call logs, or both. Restricted messages have a separate option for cases where Android permits access.
-- **Automatic backups:** schedule daily, weekly, or monthly backups. They reuse your selected content and current encryption setting, and completion notifications report what each run saved.
-- **Retention choices:** keep the newest N backup sets, keep all of them, or keep recent backups by daily, weekly, and monthly age tiers.
-- **Portable archives:** records are stored together in a versioned archive instead of being flattened into a chat transcript; RCS capture is best effort when the device exposes a compatible provider.
-- **Safe restore:** encrypted archives are authenticated before any phone data is changed, unencrypted archives are clearly identified, and existing records are skipped instead of duplicated.
-- **Optional encryption:** enable encryption and choose a password to protect `.lsb.enc` archives with AES-256-GCM and PBKDF2-HMAC-SHA256; unencrypted archives use `.lsb`.
-- **Comfortable to use:** choose the system, light, or dark theme and app language from the Display menu.
-- **Controlled storage:** manual and scheduled backups share one Storage Access Framework location.
-- **FLOSS:** released under GPL-3.0-only.
+<p align="center">
+  <strong>Back up your messages and call history without giving the app internet access.</strong>
+  <br>
+  No account · No ads · No analytics or tracking
+</p>
 
-The app never stores your backup password as plain text. When encryption is enabled, the password is wrapped by Android Keystore so manual and scheduled backups can run without asking every time. If it is forgotten, an encrypted archive cannot be recovered.
+<p align="center">
+  <a href="https://github.com/AshkanRafiee/Libre-SMS-Backup/releases">Download APK</a> ·
+  <a href="https://cafebazaar.ir/app/com.ashkanrafiee.libresmsbackup">Cafe Bazaar</a>
+</p>
 
-## Important Android notes
+Keep a copy of your SMS, available MMS, and call history in a folder you choose. Back up now or set a schedule for the records you want to keep.
 
-- Exact schedule timing may require Android's exact-alarm access, and battery optimization can delay or skip background backups.
-- Restricted messages are often hidden or encrypted RCS records. Android may require the app to become the default SMS app temporarily; selecting them turns off scheduled backups until they are deselected.
-- SMS/MMS restore may also require the temporary default SMS role. While the app holds that role, avoid receiving new MMS because it does not handle incoming MMS delivery; the app guides you back to your previous SMS app afterward.
+## Private by design
 
-## Build
+Libre SMS Backup has **no Android internet permission** and does not ask for Contacts access. Back up and restore offline with local storage. If you choose a cloud-backed folder, its provider may sync the files; Libre SMS Backup does not upload them.
 
-Requirements: Android SDK 36 and JDK 17 or newer (releases are built with JDK 21).
+**Encryption is optional.** Enable it to protect new archives with AES-256-GCM. Without encryption, anyone with access to the file can read it. Keep the original password: you’ll need it to restore an encrypted archive.
 
-```bash
-./gradlew assembleDebug
-./gradlew assembleRelease
-./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
-```
+## What you control
 
-The shipped app has no third-party runtime dependencies. AndroidX is used only by instrumented tests.
+| Feature | What you can do |
+| --- | --- |
+| **Scheduled backups** | Choose a time for daily, weekly, or monthly backups. Keep messages, call logs, or both. |
+| **Automatic retention** | Keep the newest sets, keep everything, or keep the newest available backup for each day, week, and month within windows you choose. The app trims older sets after a successful backup. |
+| **Restore without starting over** | Restore just messages, just calls, or both. The app checks encrypted archives before writing any records and skips detected duplicates. |
 
-Run the instrumented test suite with the project’s Android test runner on a disposable emulator. It covers archive encryption, restore parsing, scheduling, retention, permissions, locales, and backup summaries.
+## A look inside
 
-## Privacy boundary
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01-overview-dark.png" width="230" alt="Dark backup overview with storage, schedule, retention and encryption settings">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02-schedule.png" width="230" alt="Schedule dialog showing daily, weekly and monthly backup options">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03-retention.png" width="230" alt="Retention settings for daily, weekly and monthly backup windows">
+</p>
 
-SMS, MMS, and call-log permissions expose extremely sensitive data. Libre SMS Backup processes that data locally and does not request `INTERNET`, upload it, or log message bodies, phone numbers, contacts, or call details. The app does not request contacts access; restored SMS uses the destination SMS provider without reading the address book. From About, you can optionally create a report containing only anonymized technical diagnostics and choose whether to share it. The app's own settings and password are excluded from Android's automatic device and cloud backup. A chosen Storage Access Framework destination may itself be cloud-backed; its syncing and retention are controlled by that provider. Read the [privacy policy](PRIVACY.md) for the full boundary.
+## Before you start
+
+Requires **Android 8.0+**. SMS/MMS restore may need the default SMS role temporarily; incoming MMS isn't handled while Libre SMS Backup holds it. Restricted-message backups pause scheduling, and RCS coverage depends on your device. See the [user guide](docs/USER-GUIDE.md) before switching phones or resetting one.
+
+[Privacy policy](PRIVACY.md) · [GPL‑3.0 license](LICENSE) · [Report an issue](https://github.com/AshkanRafiee/Libre-SMS-Backup/issues)
