@@ -7,7 +7,25 @@ import java.util.Locale;
 
 /** Creates small allow-listed diagnostics without reading phone records or paths. */
 final class ReportDiagnostics {
+    static final String RESTORE_AUTHENTICATION_FAILED = "authentication_failed";
+    static final String RESTORE_INSPECTION_FAILED = "inspection_failed";
+    static final String RESTORE_ARCHIVE_TOO_LARGE = "archive_too_large";
+    static final String RESTORE_ENCRYPTED_ARCHIVE_TOO_LARGE = "encrypted_archive_too_large";
+    static final String RESTORE_EXECUTION_FAILED = "execution_failed";
+    static final String RESTORE_RECORDS_FAILED = "records_failed";
+    private static final String LAST_RESTORE_ERROR = "last_restore_error";
+
     private ReportDiagnostics() {}
+
+    static void recordRestoreError(Context context, String code) {
+        if (isRestoreErrorCode(code)) {
+            ScheduleManager.prefs(context).edit().putString(LAST_RESTORE_ERROR, code).apply();
+        }
+    }
+
+    static void clearRestoreError(Context context) {
+        ScheduleManager.prefs(context).edit().remove(LAST_RESTORE_ERROR).apply();
+    }
 
     static String create(Context context) {
         StringBuilder report = new StringBuilder();
@@ -29,7 +47,27 @@ final class ReportDiagnostics {
                 .append(safe(ScheduleManager.prefs(context).getString("last_error", ""))).append('\n');
         report.append("last_manual_error=")
                 .append(safe(ScheduleManager.prefs(context).getString("manual_last_error", ""))).append('\n');
+        report.append(LAST_RESTORE_ERROR).append('=').append(lastRestoreError(context)).append('\n');
         return report.toString();
+    }
+
+    private static String lastRestoreError(Context context) {
+        try {
+            String code = ScheduleManager.prefs(context).getString(LAST_RESTORE_ERROR, null);
+            if (isRestoreErrorCode(code)) return code;
+        } catch (ClassCastException ignored) {
+            // A value of the wrong preference type is not a restore status.
+        }
+        return "none";
+    }
+
+    private static boolean isRestoreErrorCode(String code) {
+        return RESTORE_AUTHENTICATION_FAILED.equals(code)
+                || RESTORE_INSPECTION_FAILED.equals(code)
+                || RESTORE_ARCHIVE_TOO_LARGE.equals(code)
+                || RESTORE_ENCRYPTED_ARCHIVE_TOO_LARGE.equals(code)
+                || RESTORE_EXECUTION_FAILED.equals(code)
+                || RESTORE_RECORDS_FAILED.equals(code);
     }
 
     private static String deviceName() {
