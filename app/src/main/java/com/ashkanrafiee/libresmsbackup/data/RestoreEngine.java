@@ -7,6 +7,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.CallLog;
 import android.provider.Telephony;
+import android.util.Base64;
 import android.util.JsonReader;
 import android.util.JsonToken;
 
@@ -15,6 +16,8 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -81,13 +84,14 @@ public final class RestoreEngine {
             ArchiveSummary preview, ProgressListener listener) throws Exception {
         ContentResolver resolver = context.getContentResolver();
         if (preview == null) preview = inspect(plaintext);
+        boolean hasRcs = includeRcs && preview.rcsCount > 0;
         Set<String> existingSms = (includeSms || includeRcs)
                 ? existingKeys(resolver, Telephony.Sms.CONTENT_URI, SMS_KEY_COLUMNS,
-                includeRcs ? Long.MIN_VALUE : preview.smsMinDate,
-                includeRcs ? Long.MAX_VALUE : preview.smsMaxDate) : null;
+                hasRcs ? Long.MIN_VALUE : preview.smsMinDate,
+                hasRcs ? Long.MAX_VALUE : preview.smsMaxDate, true) : null;
         Set<String> existingCalls = includeCalls
                 ? existingKeys(resolver, CallLog.Calls.CONTENT_URI, CALL_KEY_COLUMNS,
-                preview.callsMinDate, preview.callsMaxDate) : null;
+                preview.callsMinDate, preview.callsMaxDate, false) : null;
         Map<String, Long> threadIds = new HashMap<>();
         int total = (includeSms ? preview.smsCount : 0) + (includeCalls ? preview.callsCount : 0)
                 + (includeMms ? preview.mmsCount : 0) + (includeRcs ? preview.rcsCount : 0);
@@ -190,10 +194,11 @@ public final class RestoreEngine {
             boolean sms, Set<String> existing, RestoreSummary result,
             Map<String, Long> threadIds,
             ProgressListener listener, int[] completed, int total) throws IOException {
+        MessageDigest digest = sms ? smsKeyDigest() : null;
         reader.beginArray();
         while (reader.hasNext()) {
             ContentValues values = readRecord(reader, sms);
-            String key = keyFor(values, sms);
+            String key = keyFor(values, sms, digest);
             if (existing.contains(key)) {
                 result.duplicates++;
                 reportProgress(listener, ++completed[0], total);
@@ -447,6 +452,7 @@ public final class RestoreEngine {
             Set<String> existingSms, RestoreSummary result,
             Map<String, Long> threadIds,
             ProgressListener listener, int[] completed, int total) throws IOException {
+        MessageDigest digest = smsKeyDigest();
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
@@ -476,7 +482,7 @@ public final class RestoreEngine {
                     sms.put("seen", row.getAsInteger("seen") == null ? 1 : row.getAsInteger("seen"));
                     sms.put("type", row.getAsInteger("type") == null ? Telephony.Sms.MESSAGE_TYPE_INBOX : row.getAsInteger("type"));
                     attachThreadId(resolver, sms, threadIds);
-                    String key = keyFor(sms, true);
+                    String key = keyFor(sms, true, digest);
                     if (existingSms.contains(key)) { result.duplicates++; continue; }
                     try {
                         if (resolver.insert(Telephony.Sms.CONTENT_URI, sms) == null) throw new SecurityException("provider rejected RCS fallback");
@@ -531,14 +537,10 @@ public final class RestoreEngine {
         MmsPart(ContentValues values, String dataBase64) { this.values = values; this.dataBase64 = dataBase64; }
     }
 
-    private static Set<String> existingKeys(ContentResolver resolver, Uri uri, String[] columns)
-            throws IOException {
-        return existingKeys(resolver, uri, columns, Long.MIN_VALUE, Long.MAX_VALUE);
-    }
-
     private static Set<String> existingKeys(ContentResolver resolver, Uri uri, String[] columns,
-            long minDate, long maxDate) throws IOException {
+            long minDate, long maxDate, boolean sms) throws IOException {
         Set<String> keys = new HashSet<>();
+        MessageDigest digest = sms ? smsKeyDigest() : null;
         String selection = minDate != Long.MAX_VALUE && maxDate != Long.MIN_VALUE
                 ? "date >= ? AND date <= ?" : null;
         String[] selectionArgs = selection == null ? null
@@ -553,7 +555,7 @@ public final class RestoreEngine {
                     else key.append(cursor.getString(index));
                     key.append('\u001f');
                 }
-                keys.add(key.toString());
+                keys.add(compactKey(key, digest));
             }
         } catch (SecurityException e) {
             throw new IOException("read permission required", e);
@@ -561,14 +563,29 @@ public final class RestoreEngine {
         return keys;
     }
 
-    private static String keyFor(ContentValues values, boolean sms) {
+    private static String keyFor(ContentValues values, boolean sms, MessageDigest digest) {
         String[] columns = sms ? SMS_KEY_COLUMNS : CALL_KEY_COLUMNS;
         StringBuilder key = new StringBuilder();
         for (String column : columns) {
             String value = values.getAsString(column);
             key.append(value == null ? "<null>" : value).append('\u001f');
         }
-        return key.toString();
+        return compactKey(key, digest);
+    }
+
+    // Don't keep a second copy of every SMS body in memory during large restores.
+    private static String compactKey(StringBuilder key, MessageDigest digest) {
+        String value = key.toString();
+        if (digest == null) return value;
+        return Base64.encodeToString(digest.digest(value.getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP);
+    }
+
+    private static MessageDigest smsKeyDigest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     private static long parseLong(String value) {

@@ -343,7 +343,7 @@ public final class ArchiveFormat {
             }
             json.endArray();
             json.name("files").beginArray();
-            try (Cursor files = context.getContentResolver().query(RCS_FILE_URI, null, null, null, "date ASC")) {
+            try (Cursor files = queryRcsFiles(context)) {
                 if (files != null) while (files.moveToNext()) {
                     json.beginObject();
                     json.name("row"); writeCursorRow(json, files, files.getColumnNames());
@@ -354,7 +354,7 @@ public final class ArchiveFormat {
                     }
                     json.endObject();
                 }
-            } catch (Exception ignored) { }
+            }
             json.endArray();
         } catch (SecurityException | IllegalArgumentException | IOException e) {
             if (chats == null) {
@@ -367,6 +367,14 @@ public final class ArchiveFormat {
         }
         json.endObject();
         return count;
+    }
+
+    private static Cursor queryRcsFiles(Context context) {
+        try {
+            return context.getContentResolver().query(RCS_FILE_URI, null, null, null, "date ASC");
+        } catch (RuntimeException unavailable) {
+            return null;
+        }
     }
 
     private static long mmsSecondsToMillis(long value) {
