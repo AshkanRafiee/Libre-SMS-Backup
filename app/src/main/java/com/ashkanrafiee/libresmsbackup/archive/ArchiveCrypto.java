@@ -17,7 +17,6 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
 import javax.crypto.AEADBadTagException;
 import javax.crypto.BadPaddingException;
@@ -97,14 +96,14 @@ public final class ArchiveCrypto {
             destination.write(FORMAT_VERSION);
             writeInt(destination, header.length);
             destination.write(header);
-            if (!encrypted) return destination;
+            if (!encrypted) return PayloadLimit.write(destination, PayloadLimit.bytes(false), false);
             keyBytes = deriveKey(password, salt, PBKDF2_ITERATIONS, KEY_BITS);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(keyBytes, "AES"),
                     new GCMParameterSpec(TAG_BITS, iv));
             cipher.updateAAD(header);
 
-            return new CipherOutputStream(destination, cipher);
+            return PayloadLimit.write(encryptingStream(destination, cipher), PayloadLimit.bytes(true), true);
         } catch (GeneralSecurityException | org.json.JSONException | RuntimeException e) {
             throw new IOException("Unable to initialize archive encryption", e);
         } finally {
@@ -115,27 +114,19 @@ public final class ArchiveCrypto {
         }
     }
 
-    /** Reads and authenticates the header, returning a stream for the encrypted payload. */
+    /** Opens the payload. Encrypted content is authenticated only after reading it to EOF. */
     public static InputStream openDecrypted(InputStream source, char[] password) throws IOException {
+        return openPayload(source, password).stream;
+    }
+
+    static OpenedPayload openPayload(InputStream source, char[] password) throws IOException {
         if (source == null || password == null) throw new IllegalArgumentException();
         DataInputStream input = new DataInputStream(source);
-        byte[] magic = new byte[MAGIC.length];
-        input.readFully(magic);
-        if (!Arrays.equals(MAGIC, magic)) throw new IOException("unsupported archive");
-        int version = input.readUnsignedByte();
-        if (version != FORMAT_VERSION) throw new IOException("unsupported archive version");
-        int headerLength = input.readInt();
-        if (headerLength < 2 || headerLength > MAX_HEADER_BYTES)
-            throw new IOException("invalid archive header");
-        byte[] header = new byte[headerLength];
-        input.readFully(header);
+        byte[] header = readHeader(input);
         try {
-            JSONObject json = new JSONObject(new String(header, StandardCharsets.UTF_8));
-            if (!"LSMBK".equals(json.optString("format"))
-                    || json.optInt("version", -1) != FORMAT_VERSION) {
-                throw new IOException("unsupported archive format");
-            }
-            if ("none".equals(json.optString("encryption"))) return input;
+            JSONObject json = parseHeader(header);
+            if (!isEncrypted(json))
+                return new OpenedPayload(PayloadLimit.read(input, PayloadLimit.bytes(false), false), false);
             JSONObject kdf = json.getJSONObject("kdf");
             JSONObject cipherJson = json.getJSONObject("cipher");
             if (!"PBKDF2WithHmacSHA256".equals(kdf.getString("algorithm"))
@@ -157,7 +148,8 @@ public final class ArchiveCrypto {
                 cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keyBytes, "AES"),
                         new GCMParameterSpec(TAG_BITS, iv));
                 cipher.updateAAD(header);
-                return new CipherInputStream(input, cipher);
+                InputStream bounded = PayloadLimit.read(input, PayloadLimit.bytes(true) + TAG_BITS / 8, true);
+                return new OpenedPayload(decryptingStream(bounded, cipher), true);
             } finally {
                 Arrays.fill(salt, (byte) 0);
                 Arrays.fill(iv, (byte) 0);
@@ -170,34 +162,145 @@ public final class ArchiveCrypto {
         }
     }
 
+    // Finalization and the final write must both succeed before a backup is published.
+    private static OutputStream encryptingStream(OutputStream destination, Cipher cipher) {
+        return new OutputStream() {
+            private boolean closed;
+
+            @Override public void write(int value) throws IOException {
+                write(new byte[]{(byte) value}, 0, 1);
+            }
+
+            @Override public void write(byte[] bytes, int offset, int length) throws IOException {
+                if (closed) throw new IOException("encrypted output is closed");
+                byte[] encrypted = cipher.update(bytes, offset, length);
+                if (encrypted != null) destination.write(encrypted);
+            }
+
+            @Override public void flush() throws IOException { destination.flush(); }
+
+            @Override public void close() throws IOException {
+                if (closed) return;
+                closed = true;
+                try (OutputStream output = destination) {
+                    output.write(cipher.doFinal());
+                } catch (GeneralSecurityException error) {
+                    throw new IOException("could not finish archive encryption", error);
+                }
+            }
+        };
+    }
+
+    // Android's CipherInputStream can allocate a larger output array on each
+    // input chunk while GCM is still buffering. Use update's actual output instead.
+    private static InputStream decryptingStream(InputStream source, Cipher cipher) {
+        return new InputStream() {
+            private final byte[] input = new byte[32 * 1024];
+            private byte[] output;
+            private int position;
+            private boolean finished;
+
+            @Override public int read() throws IOException {
+                return fill() ? output[position++] & 0xff : -1;
+            }
+
+            @Override public int read(byte[] bytes, int offset, int length) throws IOException {
+                if (length == 0) return 0;
+                if (!fill()) return -1;
+                int count = Math.min(length, output.length - position);
+                System.arraycopy(output, position, bytes, offset, count);
+                position += count;
+                return count;
+            }
+
+            private boolean fill() throws IOException {
+                while (output == null || position == output.length) {
+                    clearOutput();
+                    if (finished) return false;
+                    int count = source.read(input);
+                    if (count == -1) {
+                        finished = true;
+                        try {
+                            output = cipher.doFinal();
+                        } catch (GeneralSecurityException error) {
+                            throw new IOException("could not authenticate archive", error);
+                        }
+                    } else if (count > 0) {
+                        output = cipher.update(input, 0, count);
+                    }
+                }
+                return true;
+            }
+
+            private void clearOutput() {
+                if (output != null) Arrays.fill(output, (byte) 0);
+                output = null;
+                position = 0;
+            }
+
+            @Override public void close() throws IOException {
+                finished = true;
+                clearOutput();
+                source.close();
+            }
+        };
+    }
+
     /** Reads only the bounded container header so the UI can avoid asking for a password on plaintext archives. */
     public static boolean requiresPassword(InputStream source) throws IOException {
         if (source == null) throw new IllegalArgumentException();
-        DataInputStream input = new DataInputStream(source);
-        byte[] magic = new byte[MAGIC.length];
-        byte[] header = null;
+        byte[] header = readHeader(new DataInputStream(source));
         try {
-            input.readFully(magic);
-            if (!Arrays.equals(MAGIC, magic)) throw new IOException("unsupported archive");
-            if (input.readUnsignedByte() != FORMAT_VERSION) throw new IOException("unsupported archive version");
-            int headerLength = input.readInt();
-            if (headerLength < 2 || headerLength > MAX_HEADER_BYTES)
-                throw new IOException("invalid archive header");
-            header = new byte[headerLength];
-            input.readFully(header);
-            JSONObject json = new JSONObject(new String(header, StandardCharsets.UTF_8));
-            if (!"LSMBK".equals(json.optString("format"))
-                    || json.optInt("version", -1) != FORMAT_VERSION)
-                throw new IOException("unsupported archive format");
-            String encryption = json.optString("encryption", "password");
-            if (!"none".equals(encryption) && !"password".equals(encryption))
-                throw new IOException("unsupported archive encryption");
-            return "password".equals(encryption);
+            return isEncrypted(parseHeader(header));
         } catch (org.json.JSONException | RuntimeException e) {
             throw new IOException("invalid archive header", e);
         } finally {
-            if (header != null) Arrays.fill(header, (byte) 0);
-            Arrays.fill(magic, (byte) 0);
+            Arrays.fill(header, (byte) 0);
+        }
+    }
+
+    private static byte[] readHeader(DataInputStream input) throws IOException {
+        byte[] magic = new byte[MAGIC.length];
+        input.readFully(magic);
+        if (!Arrays.equals(MAGIC, magic)) throw new IOException("unsupported archive");
+        if (input.readUnsignedByte() != FORMAT_VERSION) throw new IOException("unsupported archive version");
+        int length = input.readInt();
+        if (length < 2 || length > MAX_HEADER_BYTES) throw new IOException("invalid archive header");
+        byte[] header = new byte[length];
+        input.readFully(header);
+        return header;
+    }
+
+    private static JSONObject parseHeader(byte[] header) throws IOException, org.json.JSONException {
+        JSONObject json = new JSONObject(new String(header, StandardCharsets.UTF_8));
+        if (!"LSMBK".equals(json.optString("format")) || json.optInt("version", -1) != FORMAT_VERSION)
+            throw new IOException("unsupported archive format");
+        return json;
+    }
+
+    private static boolean isEncrypted(JSONObject header) throws IOException {
+        String encryption = header.optString("encryption", "password");
+        if ("password".equals(encryption)) return true;
+        if ("none".equals(encryption)) return false;
+        throw new IOException("unsupported archive encryption");
+    }
+
+    static final class OpenedPayload {
+        final InputStream stream;
+        final boolean encrypted;
+
+        OpenedPayload(InputStream stream, boolean encrypted) {
+            this.stream = stream;
+            this.encrypted = encrypted;
+        }
+    }
+
+    public static final class PayloadTooLargeException extends IOException {
+        public final boolean encrypted;
+
+        PayloadTooLargeException(boolean encrypted) {
+            super("archive payload exceeds the size limit");
+            this.encrypted = encrypted;
         }
     }
 

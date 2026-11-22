@@ -12,6 +12,8 @@ import android.util.JsonWriter;
 
 import com.ashkanrafiee.libresmsbackup.data.RestoreEngine;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -27,7 +29,6 @@ public final class ArchiveFormat {
     public static final String FILE_EXTENSION = ".lsb";
     public static final String ENCRYPTED_FILE_EXTENSION = ".lsb.enc";
     public static final int PAYLOAD_SCHEMA = 2;
-    private static final long MAX_RESTORE_PAYLOAD_BYTES = 512L * 1024L * 1024L;
     private static final long MAX_MMS_PART_BYTES = 64L * 1024L * 1024L;
     private static final Uri MMS_URI = Uri.parse("content://mms");
     private static final Uri RCS_CHAT_URI = Uri.parse("content://im/chat");
@@ -49,9 +50,9 @@ public final class ArchiveFormat {
         int mms = 0;
         int rcs = 0;
         try {
-            try (FileOutputStream raw = new FileOutputStream(temp)) {
-                OutputStream payload = ArchiveCrypto.openOutput(raw, context, password, encrypted);
-                JsonWriter json = new JsonWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8));
+            try (OutputStream raw = new BufferedOutputStream(new FileOutputStream(temp));
+                 JsonWriter json = new JsonWriter(new OutputStreamWriter(
+                         ArchiveCrypto.openOutput(raw, context, password, encrypted), StandardCharsets.UTF_8))) {
                 json.beginObject();
                 json.name("schema").value(PAYLOAD_SCHEMA);
                 json.name("createdAtMs").value(System.currentTimeMillis());
@@ -88,9 +89,7 @@ public final class ArchiveFormat {
                 json.name("rcs");
                 rcs = writeRcsSection(context, json, includeSms);
                 json.endObject();
-                json.flush();
-                // Closing JsonWriter closes CipherOutputStream and writes the GCM authentication tag.
-                json.close();
+                // Closing JsonWriter also finalizes the encrypted payload.
             }
             copyFileToUri(context, temp, destination);
             return new BackupSummary(sms, calls, mms, rcs);
@@ -105,28 +104,24 @@ public final class ArchiveFormat {
     public static synchronized PreparedRestore prepareRestore(Context context, Uri source, char[] password)
             throws Exception {
         if (source == null || password == null) throw new IllegalArgumentException();
-        File plaintext = File.createTempFile("libresmsbackup-restore-", ".json", context.getCacheDir());
+        File plaintext = null;
         boolean ownershipTransferred = false;
-        boolean encrypted;
         try {
-            try (InputStream header = context.getContentResolver().openInputStream(source)) {
-                if (header == null) throw new IOException("cannot open source");
-                encrypted = ArchiveCrypto.requiresPassword(header);
-            }
+            plaintext = File.createTempFile("libresmsbackup-restore-", ".json", context.getCacheDir());
+            boolean encrypted;
             try (InputStream raw = context.getContentResolver().openInputStream(source)) {
                 if (raw == null) throw new IOException("cannot open source");
-                try (InputStream decrypted = ArchiveCrypto.openDecrypted(raw, password);
+                ArchiveCrypto.OpenedPayload payload = ArchiveCrypto.openPayload(new BufferedInputStream(raw), password);
+                encrypted = payload.encrypted;
+                try (InputStream decrypted = payload.stream;
                      FileOutputStream output = new FileOutputStream(plaintext)) {
                     byte[] buffer = new byte[32 * 1024];
-                    long total = 0;
-                    int count;
-                    while ((count = decrypted.read(buffer)) != -1) {
-                        total += count;
-                        if (total > MAX_RESTORE_PAYLOAD_BYTES) throw new IOException("archive payload too large");
-                        output.write(buffer, 0, count);
+                    try {
+                        int count;
+                        while ((count = decrypted.read(buffer)) != -1) output.write(buffer, 0, count);
+                    } finally {
+                        Arrays.fill(buffer, (byte) 0);
                     }
-                    output.flush();
-                    Arrays.fill(buffer, (byte) 0);
                 }
             }
             // Do not touch provider data until the complete GCM payload has authenticated.
@@ -137,7 +132,7 @@ public final class ArchiveFormat {
             Arrays.fill(password, '\0');
             // Ownership moves to PreparedRestore only after it is constructed successfully.
             // On every failure, remove the authenticated payload from the cache immediately.
-            if (!ownershipTransferred) plaintext.delete();
+            if (!ownershipTransferred && plaintext != null) plaintext.delete();
         }
     }
 

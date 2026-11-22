@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -53,5 +54,76 @@ public class ArchiveCryptoTest extends TestCase {
 
         byte[] encrypted = ArchiveCrypto.encryptForTest(new byte[] {1}, "password-123".toCharArray());
         assertTrue(ArchiveCrypto.requiresPassword(new ByteArrayInputStream(encrypted)));
+    }
+
+    public void testCurrentEncryptedWriterRoundTripsThroughShortReads() throws Exception {
+        byte[] original = new byte[96 * 1024];
+        new java.util.Random(42).nextBytes(original);
+        char[] password = "round trip test password".toCharArray();
+        ByteArrayOutputStream destination = new ByteArrayOutputStream();
+        try (OutputStream output = ArchiveCrypto.openEncrypted(destination, null, password)) {
+            output.write(original, 0, 19);
+            output.write(original, 19, original.length - 19);
+        }
+        ByteArrayInputStream source = new ByteArrayInputStream(destination.toByteArray()) {
+            @Override public synchronized int read(byte[] bytes, int offset, int length) {
+                return super.read(bytes, offset, Math.min(length, 111));
+            }
+        };
+        ByteArrayOutputStream recovered = new ByteArrayOutputStream();
+        try (InputStream input = ArchiveCrypto.openDecrypted(source, password)) {
+            byte[] buffer = new byte[777];
+            int count;
+            while ((count = input.read(buffer)) != -1) recovered.write(buffer, 0, count);
+        }
+        assertTrue(Arrays.equals(original, recovered.toByteArray()));
+    }
+
+    public void testEncryptedFinalWriteFailureIsNotSwallowed() throws Exception {
+        final boolean[] failWrites = {false};
+        OutputStream destination = new OutputStream() {
+            @Override public void write(int value) throws IOException {
+                if (failWrites[0]) throw new IOException("test write failure");
+            }
+        };
+        OutputStream encrypted = ArchiveCrypto.openEncrypted(destination, null, "test password".toCharArray());
+        encrypted.write(new byte[]{1, 2, 3});
+        failWrites[0] = true;
+        try {
+            encrypted.close();
+            fail("a backup with an unwritten authentication tag must fail");
+        } catch (IOException expected) {
+            assertEquals("test write failure", expected.getMessage());
+        }
+    }
+
+    public void testSizeLimitAtEofAndOneByteOver() throws Exception {
+        for (boolean encrypted : new boolean[]{false, true}) {
+            byte[] payload = {1, 2, 3};
+            try (InputStream input = PayloadLimit.read(new ByteArrayInputStream(payload), 3, encrypted)) {
+                assertEquals(3, input.read(new byte[8]));
+                assertEquals(-1, input.read());
+            }
+            try (InputStream input = PayloadLimit.read(new ByteArrayInputStream(payload), 2, encrypted)) {
+                assertEquals(2, input.read(new byte[2]));
+                try {
+                    input.read(new byte[8]);
+                    fail("data beyond the limit must not reach the caller");
+                } catch (ArchiveCrypto.PayloadTooLargeException expected) {
+                    assertEquals(encrypted, expected.encrypted);
+                }
+            }
+            ByteArrayOutputStream destination = new ByteArrayOutputStream();
+            try (OutputStream limited = PayloadLimit.write(destination, 2, encrypted)) {
+                limited.write(payload, 0, 2);
+                try {
+                    limited.write(3);
+                    fail("data beyond the limit must not be written");
+                } catch (ArchiveCrypto.PayloadTooLargeException expected) {
+                    assertEquals(encrypted, expected.encrypted);
+                }
+            }
+            assertTrue(Arrays.equals(new byte[]{1, 2}, destination.toByteArray()));
+        }
     }
 }
