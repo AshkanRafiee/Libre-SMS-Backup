@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.PowerManager;
 
 import com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat;
+import com.ashkanrafiee.libresmsbackup.archive.ArchiveCrypto;
 
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
@@ -124,6 +125,10 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
             if (cancelled(context)) return;
             if (error instanceof SmsAccess.RestrictedException) {
                 fail(context, context.getString(R.string.scheduled_error_sms_restricted), ACTION_SMS_ACCESS);
+            } else if (error instanceof ArchiveCrypto.PayloadTooLargeException) {
+                boolean encrypted = ((ArchiveCrypto.PayloadTooLargeException) error).encrypted;
+                fail(context, context.getString(encrypted ? R.string.backup_error_encrypted_too_large
+                        : R.string.backup_error_archive_too_large), ACTION_SCOPE);
             } else {
                 String detail = error.getMessage();
                 String action = detail != null && (detail.contains("folder") || detail.contains("destination"))

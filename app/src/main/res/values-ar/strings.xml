@@ -107,6 +107,11 @@
     <string name="restore_no_records">لا تحتوي هذه النسخة على رسائل أو سجلات مكالمات.</string>
     <string name="error_generic">تعذر إكمال العملية بأمان.</string>
     <string name="error_wrong_password">كلمة مرور خاطئة أو نسخة احتياطية غير صالحة</string>
+    <string name="restore_preview_error_title">تعذّر فحص النسخة الاحتياطية</string>
+    <string name="restore_error_archive_too_large">هذه النسخة الاحتياطية أكبر من أن تُستعاد. احتفظ بالملف الأصلي. إذا كان الجهاز الأصلي لا يزال لديك، فجرّب نسخ الرسائل وسجلات المكالمات احتياطيًا كلًّا على حدة.</string>
+    <string name="restore_error_encrypted_too_large">هذه النسخة الاحتياطية المشفّرة أكبر من أن تُستعاد على هذا الجهاز. احتفظ بالملف الأصلي. قد تتمكّن من فتحه على جهاز تتوفّر فيه ذاكرة أكبر للتطبيق.</string>
+    <string name="backup_error_archive_too_large">لا يمكن إكمال النسخ الاحتياطي لأن حجم النسخة كبير جدًا. جرّب نسخ الرسائل وسجلات المكالمات احتياطيًا كلًّا على حدة.</string>
+    <string name="backup_error_encrypted_too_large">النسخة الاحتياطية المشفّرة أكبر مما يمكن لهذا الجهاز التعامل معه. جرّب نسخ الرسائل وسجلات المكالمات احتياطيًا كلًّا على حدة.</string>
     <string name="error_no_destination">تعذر فتح الموقع المحدد.</string>
     <string name="error_no_source">تعذر فتح النسخة المحددة.</string>
     <string name="about_title">حول التطبيق</string>

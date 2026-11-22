@@ -15,6 +15,7 @@ import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.provider.Telephony;
 import android.text.InputType;
@@ -37,8 +38,8 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat;
 import com.ashkanrafiee.libresmsbackup.archive.ArchiveCrypto;
+import com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat;
 import com.ashkanrafiee.libresmsbackup.data.RestoreEngine;
 import com.ashkanrafiee.libresmsbackup.retention.RetentionPolicy;
 
@@ -51,11 +52,10 @@ import java.util.concurrent.Executors;
 
 /** Small, deliberately boring main screen: the app's sensitive data stays behind explicit actions. */
 public class MainActivity extends Activity {
-    private static ArchiveFormat.PreparedRestore retainedRestoreAcrossSmsRole;
     private static final int REQUEST_BACKUP_FOLDER = 10;
-    private static final int REQUEST_OPEN = 11;
+    static final int REQUEST_OPEN = 11;
     private static final int REQUEST_BACKUP_PERMISSIONS = 12;
-    private static final int REQUEST_RESTORE_PERMISSIONS = 13;
+    static final int REQUEST_RESTORE_PERMISSIONS = 13;
     private static final int REQUEST_SCHEDULE_PERMISSIONS = 15;
     private static final int REQUEST_SMS_ROLE = 16;
     private static final int REQUEST_SMS_SWITCH_BACK = 17;
@@ -63,8 +63,14 @@ public class MainActivity extends Activity {
     private static final int REQUEST_RESTORE_WRITE = 19;
     private static final int MAX_SMS_ROLE_CHECKS = 40;
     private static final long SMS_ROLE_CHECK_DELAY_MS = 250L;
+    static final String RESTORE_SMS_ROLE_PREFS = "restore_sms_role";
     private static final String RESTRICTED_ROLE_PREFS = "restricted_sms_role";
+    private static final ExecutorService RESTORE_PREVIEW_EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final ExecutorService RESTORE_WRITE_EXECUTOR = Executors.newSingleThreadExecutor();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler restoreRoleChecks = new Handler(Looper.getMainLooper());
+    private final Runnable verifyRestoreSmsRole = this::checkSmsRoleAndContinue;
+    private final Runnable onRestoreSmsRoleReleased = this::maybeOpenPendingSmsSwitchBack;
     private TextView status;
     private TextView statusDetail;
     private ProgressBar progress;
@@ -82,16 +88,14 @@ public class MainActivity extends Activity {
     private Uri selectedUri;
     private boolean pendingBackupFolder;
     private boolean pendingScheduleFolder;
-    private ArchiveFormat.PreparedRestore pendingRestore;
-    private boolean pendingRestoreAfterSmsRole;
-    private boolean temporarilyChangedSmsRole;
-    private boolean pendingRestoreSms;
-    private boolean pendingRestoreCalls;
-    private boolean pendingRestoreWritePermission;
+    private RestoreSession restoreSession;
+    private RestoreSession.Step renderedRestoreStep;
+    private AlertDialog restoreDialog;
+    private boolean restoreInterrupted;
+    private boolean resumed;
     private boolean pendingBackupAfterSmsRole;
     private boolean restrictedSmsRoleRequestPending;
     private boolean restrictedSmsRoleChangedByUs;
-    private String previousSmsPackage;
     private String restrictedPreviousSmsPackage;
     private boolean switchBackSettingsOpened;
     private boolean switchBackDialogShown;
@@ -112,23 +116,17 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        restoreSession = (RestoreSession) getLastNonConfigurationInstance();
         if (state != null) {
             selectedUri = state.getParcelable("selected_uri");
             pendingBackupFolder = state.getBoolean("pending_backup_folder", false);
             pendingScheduleFolder = state.getBoolean("pending_schedule_folder", false);
-            pendingRestoreAfterSmsRole = state.getBoolean("pending_restore_sms_role", false);
-            temporarilyChangedSmsRole = state.getBoolean("temporary_sms_role", false);
-            pendingRestoreSms = state.getBoolean("pending_restore_sms", false);
-            pendingRestoreCalls = state.getBoolean("pending_restore_calls", false);
-            pendingRestoreWritePermission = state.getBoolean("pending_restore_write", false);
+            restoreInterrupted = restoreSession == null && state.getBoolean("restore_in_progress");
             pendingBackupAfterSmsRole = state.getBoolean("pending_backup_sms_role", false);
             restrictedSmsRoleRequestPending = state.getBoolean("restricted_sms_role_request", false);
-            previousSmsPackage = state.getString("previous_sms_package");
             restrictedPreviousSmsPackage = state.getString("restricted_previous_package");
+            switchBackSettingsOpened = state.getBoolean("switch_back_settings_opened");
         }
-        android.content.SharedPreferences rolePrefs = getSharedPreferences("restore_sms_role", MODE_PRIVATE);
-        if (!temporarilyChangedSmsRole) temporarilyChangedSmsRole = rolePrefs.getBoolean("switch_back_pending", false);
-        if (previousSmsPackage == null) previousSmsPackage = rolePrefs.getString("previous_package", null);
         SharedPreferences restrictedRolePrefs = getSharedPreferences(RESTRICTED_ROLE_PREFS, MODE_PRIVATE);
         if (!restrictedSmsRoleChangedByUs) {
             restrictedSmsRoleChangedByUs = restrictedRolePrefs.getBoolean("changed_by_us", false);
@@ -136,13 +134,13 @@ public class MainActivity extends Activity {
         if (restrictedPreviousSmsPackage == null) {
             restrictedPreviousSmsPackage = restrictedRolePrefs.getString("previous_package", null);
         }
-        if (pendingRestore == null && pendingRestoreAfterSmsRole && retainedRestoreAcrossSmsRole != null) {
-            pendingRestore = retainedRestoreAcrossSmsRole;
-        }
         getWindow().setStatusBarColor(color(R.color.bg));
         build();
+        if (restoreSession != null) restoreSession.onChange = this::renderRestore;
+        updateOperationControls();
         handleNotificationAction(getIntent());
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+        if (restoreSession == null && !restoreInterrupted && Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
     }
 
@@ -153,7 +151,7 @@ public class MainActivity extends Activity {
     }
 
     private void handleNotificationAction(Intent intent) {
-        if (operationBusy) return;
+        if (operationBusy || restoreSession != null) return;
         if (intent == null) return;
         String action = intent.getStringExtra(ScheduledBackupReceiver.EXTRA_NOTIFICATION_ACTION);
         intent.removeExtra(ScheduledBackupReceiver.EXTRA_NOTIFICATION_ACTION);
@@ -168,17 +166,19 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        if (pendingRestore != null) {
-            if (pendingRestoreAfterSmsRole) {
-                retainedRestoreAcrossSmsRole = pendingRestore;
-            } else {
-                pendingRestore.close();
-                if (retainedRestoreAcrossSmsRole == pendingRestore) retainedRestoreAcrossSmsRole = null;
-            }
-            pendingRestore = null;
+        restoreRoleChecks.removeCallbacks(verifyRestoreSmsRole);
+        if (restoreSession != null) {
+            restoreSession.onChange = null;
+            if (!isChangingConfigurations()) restoreSession.abandon();
         }
+        dismissRestoreDialog();
+        if (operationDialog != null) operationDialog.dismiss();
         executor.shutdownNow();
         super.onDestroy();
+    }
+
+    @Override public Object onRetainNonConfigurationInstance() {
+        return restoreSession;
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
@@ -186,15 +186,11 @@ public class MainActivity extends Activity {
         if (selectedUri != null) state.putParcelable("selected_uri", selectedUri);
         state.putBoolean("pending_backup_folder", pendingBackupFolder);
         state.putBoolean("pending_schedule_folder", pendingScheduleFolder);
-        state.putBoolean("pending_restore_sms_role", pendingRestoreAfterSmsRole);
-        state.putBoolean("temporary_sms_role", temporarilyChangedSmsRole);
-        state.putBoolean("pending_restore_sms", pendingRestoreSms);
-        state.putBoolean("pending_restore_calls", pendingRestoreCalls);
-        state.putBoolean("pending_restore_write", pendingRestoreWritePermission);
+        state.putBoolean("restore_in_progress", restoreSession != null || restoreInterrupted);
         state.putBoolean("pending_backup_sms_role", pendingBackupAfterSmsRole);
         state.putBoolean("restricted_sms_role_request", restrictedSmsRoleRequestPending);
-        if (previousSmsPackage != null) state.putString("previous_sms_package", previousSmsPackage);
         if (restrictedPreviousSmsPackage != null) state.putString("restricted_previous_package", restrictedPreviousSmsPackage);
+        state.putBoolean("switch_back_settings_opened", switchBackSettingsOpened);
     }
 
     private void build() {
@@ -416,7 +412,7 @@ public class MainActivity extends Activity {
     }
 
     private void beginRestore() {
-        chooseSource();
+        if (restoreSession == null && !RestoreSession.isSmsRestoreActive()) chooseSource();
     }
 
     private boolean hasPermissions(String[] permissions) {
@@ -426,28 +422,17 @@ public class MainActivity extends Activity {
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grants) {
         super.onRequestPermissionsResult(requestCode, permissions, grants);
+        if (requestCode == REQUEST_RESTORE_PERMISSIONS || requestCode == REQUEST_RESTORE_WRITE) {
+            handleRestorePermissionsResult(requestCode, grants);
+            return;
+        }
         boolean granted = true; for (int grant : grants) if (grant != PackageManager.PERMISSION_GRANTED) granted = false;
         if (!granted) {
             Toast.makeText(this, getString(R.string.permission_denied), Toast.LENGTH_LONG).show();
             if (requestCode == REQUEST_BACKUP_PERMISSIONS) offerRestrictedSmsRoleSwitchBack();
-            if (requestCode == REQUEST_RESTORE_PERMISSIONS || requestCode == REQUEST_RESTORE_WRITE) {
-                pendingRestoreWritePermission = false;
-                pendingRestoreSms = false;
-                pendingRestoreCalls = false;
-                if (pendingRestore != null) closePendingRestore(pendingRestore);
-                return;
-            }
             return;
         }
         if (requestCode == REQUEST_BACKUP_PERMISSIONS) startManualBackupFlow();
-        else if (requestCode == REQUEST_RESTORE_PERMISSIONS && pendingRestore != null) {
-            startSelectedRestore(pendingRestore, pendingRestoreSms, pendingRestoreCalls);
-        }
-        else if (requestCode == REQUEST_RESTORE_WRITE && pendingRestore != null) {
-            pendingRestoreWritePermission = false;
-            ArchiveFormat.PreparedRestore prepared = pendingRestore;
-            continueSelectedRestore(prepared, pendingRestoreSms, pendingRestoreCalls);
-        }
         else if (requestCode == REQUEST_SCHEDULE_PERMISSIONS) {
             if (ScheduleManager.folder(this) == null) chooseBackupFolder(false, true);
             else showScheduleDialog();
@@ -480,10 +465,12 @@ public class MainActivity extends Activity {
             return;
         }
         if (requestCode == REQUEST_SMS_SWITCH_BACK) {
+            switchBackSettingsOpened = false;
+            switchBackDialogShown = true; // Do not immediately reopen the reminder on return.
             if (!isDefaultSmsApp()) {
-                temporarilyChangedSmsRole = false;
-                previousSmsPackage = null;
-                getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit().clear().apply();
+                if (!RestoreSession.isSmsRestoreActive()) {
+                    getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE).edit().clear().apply();
+                }
                 restrictedSmsRoleChangedByUs = false;
                 restrictedPreviousSmsPackage = null;
                 getSharedPreferences(RESTRICTED_ROLE_PREFS, MODE_PRIVATE).edit().clear().apply();
@@ -500,18 +487,15 @@ public class MainActivity extends Activity {
             }
             return;
         }
-        selectedUri = data.getData();
         if (requestCode == REQUEST_OPEN) {
-            try (java.io.InputStream input = getContentResolver().openInputStream(selectedUri)) {
-                if (ArchiveCrypto.requiresPassword(input)) askPassword(false);
-                else inspectRestore(new char[0]);
-            } catch (Exception error) {
-                String failure = ArchiveCrypto.isAuthenticationFailure(error)
-                        ? getString(R.string.error_wrong_password) : getString(R.string.error_no_source);
-                Toast.makeText(this, failure, Toast.LENGTH_LONG).show();
-            }
+            if (operationBusy || restoreSession != null || RestoreSession.isSmsRestoreActive()) return;
+            restoreSession = new RestoreSession(data.getData());
+            restoreSession.onChange = this::renderRestore;
+            updateOperationControls();
+            restoreSession.probe(getApplicationContext(), RESTORE_PREVIEW_EXECUTOR);
         }
         else if (requestCode == REQUEST_BACKUP_FOLDER) {
+            selectedUri = data.getData();
             try {
                 getContentResolver().takePersistableUriPermission(selectedUri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
@@ -792,8 +776,8 @@ public class MainActivity extends Activity {
     }
 
     private void offerRestrictedSmsRoleSwitchBack() {
-        if (!restrictedSmsRoleChangedByUs || !isDefaultSmsApp()) return;
-        SharedPreferences.Editor editor = getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit()
+        if (RestoreSession.isSmsRestoreActive() || !restrictedSmsRoleChangedByUs || !isDefaultSmsApp()) return;
+        SharedPreferences.Editor editor = getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE).edit()
                 .putBoolean("switch_back_pending", true)
                 .putString("switch_back_reason", "restricted");
         if (restrictedPreviousSmsPackage != null) editor.putString("previous_package", restrictedPreviousSmsPackage);
@@ -838,16 +822,34 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        resumed = true;
+        RestoreSession.addSmsRoleReleaseListener(onRestoreSmsRoleReleased);
         ScheduleManager.reconcile(this);
-        maybeOpenPendingSmsSwitchBack();
         refreshStatus(); refreshFolder(); refreshSchedule(); refreshRetention(); refreshScope(); refreshBatteryBanner();
+        renderRestore();
+        checkSmsRoleAndContinue();
+        maybeOpenPendingSmsSwitchBack();
+        if (restoreInterrupted) {
+            restoreInterrupted = false;
+            if (!switchBackDialogShown) {
+                Toast.makeText(this, getString(R.string.notice_failed_title), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    @Override protected void onPause() {
+        resumed = false;
+        RestoreSession.removeSmsRoleReleaseListener(onRestoreSmsRoleReleased);
+        restoreRoleChecks.removeCallbacks(verifyRestoreSmsRole);
+        super.onPause();
     }
 
     private void maybeOpenPendingSmsSwitchBack() {
-        if (pendingRestoreAfterSmsRole || pendingRestore != null || switchBackSettingsOpened) return;
-        android.content.SharedPreferences rolePrefs = getSharedPreferences("restore_sms_role", MODE_PRIVATE);
-        if (rolePrefs.getBoolean("switch_back_pending", false) && isDefaultSmsApp()) {
-            if (!switchBackDialogShown) showSwitchBackDialog();
+        if (!resumed || operationBusy || restoreSession != null
+                || restrictedSmsRoleRequestPending || switchBackSettingsOpened || switchBackDialogShown) return;
+        if (RestoreSession.hasPendingSmsSwitchBack(getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE))
+                && isDefaultSmsApp()) {
+            showSwitchBackDialog();
         }
     }
 
@@ -1186,35 +1188,26 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private void askPassword(boolean creating) {
+    private void askRestorePassword(RestoreSession session) {
         LinearLayout fields = new LinearLayout(this); fields.setOrientation(LinearLayout.VERTICAL);
         fields.setPadding(dp(22), 0, dp(22), 0);
         EditText password = new EditText(this); password.setHint(getString(R.string.password_hint));
         password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         fields.addView(password, new LinearLayout.LayoutParams(-1, dp(52)));
-        EditText repeat = null;
-        if (creating) {
-            repeat = new EditText(this); repeat.setHint(getString(R.string.password_repeat_hint));
-            repeat.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-            fields.addView(repeat, new LinearLayout.LayoutParams(-1, dp(52)));
-        }
-        final EditText repeatField = repeat;
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(creating ? getString(R.string.dialog_backup_password_title) : getString(R.string.dialog_restore_password_title))
-                .setMessage(creating ? getString(R.string.password_message_backup) : getString(R.string.password_message_restore))
-                .setView(fields).setNegativeButton(getString(R.string.action_cancel), null)
-                .setPositiveButton(creating ? getString(R.string.action_continue) : getString(R.string.action_restore), null).create();
+                .setTitle(getString(R.string.dialog_restore_password_title))
+                .setMessage(getString(R.string.password_message_restore))
+                .setView(fields).setNegativeButton(getString(R.string.action_cancel), (d, w) -> cancelRestore(session))
+                .setPositiveButton(getString(R.string.action_restore), null).create();
+        dialog.setOnCancelListener(d -> cancelRestore(session));
+        dialog.setOnDismissListener(d -> password.setText(""));
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String first = password.getText().toString();
-            if (creating && first.length() < 8) { password.setError(getString(R.string.password_error_length)); return; }
-            if (creating && !first.equals(repeatField.getText().toString())) {
-                repeatField.setError(getString(R.string.password_error_mismatch)); return;
-            }
-            dialog.dismiss();
-            char[] secret = first.toCharArray();
-            if (creating) runBackup(secret); else inspectRestore(secret);
-            password.setText(""); if (repeatField != null) repeatField.setText("");
+            char[] secret = new char[password.length()];
+            password.getText().getChars(0, secret.length, secret, 0);
+            password.setText("");
+            inspectRestore(secret);
         }));
+        restoreDialog = dialog;
         dialog.show();
     }
 
@@ -1237,10 +1230,15 @@ public class MainActivity extends Activity {
         } else if (operationDialog != null && operationDialog.isShowing()) {
             operationDialog.dismiss();
         }
-        backupButton.setEnabled(!busy); restoreButton.setEnabled(!busy);
-        if (includeSms != null) includeSms.setEnabled(!busy);
-        if (includeCalls != null) includeCalls.setEnabled(!busy);
-        if (encryptionSwitch != null) encryptionSwitch.setEnabled(!busy);
+        updateOperationControls();
+    }
+
+    private void updateOperationControls() {
+        boolean enabled = !operationBusy && restoreSession == null;
+        backupButton.setEnabled(enabled); restoreButton.setEnabled(enabled);
+        if (includeSms != null) includeSms.setEnabled(enabled);
+        if (includeCalls != null) includeCalls.setEnabled(enabled);
+        if (encryptionSwitch != null) encryptionSwitch.setEnabled(enabled);
     }
 
     private void runBackup(char[] password) {
@@ -1271,8 +1269,8 @@ public class MainActivity extends Activity {
                     setBusy(false, completed);
                     Toast.makeText(this, getString(R.string.notice_backup_complete_title), Toast.LENGTH_SHORT).show();
                     if (BackupOptions.includeRestrictedMessages(this)
-                            && restrictedSmsRoleChangedByUs && isDefaultSmsApp()) {
-                        SharedPreferences rolePrefs = getSharedPreferences("restore_sms_role", MODE_PRIVATE);
+                            && !RestoreSession.isSmsRestoreActive() && restrictedSmsRoleChangedByUs && isDefaultSmsApp()) {
+                        SharedPreferences rolePrefs = getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE);
                         SharedPreferences.Editor editor = rolePrefs.edit()
                                 .putBoolean("switch_back_pending", true)
                                 .putString("switch_back_reason", "backup");
@@ -1284,8 +1282,15 @@ public class MainActivity extends Activity {
                 });
             } catch (Exception error) {
                 try { getContentResolver().delete(destination[0], null, null); } catch (Exception ignored) { }
-                final String failure = error instanceof SmsAccess.RestrictedException
-                        ? getString(R.string.error_sms_restricted) : getString(R.string.error_generic);
+                final String failure;
+                if (error instanceof ArchiveCrypto.PayloadTooLargeException) {
+                    boolean encrypted = ((ArchiveCrypto.PayloadTooLargeException) error).encrypted;
+                    failure = getString(encrypted ? R.string.backup_error_encrypted_too_large
+                            : R.string.backup_error_archive_too_large);
+                } else {
+                    failure = error instanceof SmsAccess.RestrictedException
+                            ? getString(R.string.error_sms_restricted) : getString(R.string.error_generic);
+                }
                 ScheduleManager.prefs(this).edit().putString("manual_last_error", failure).apply();
                 runOnUiThread(() -> { setBusy(false, failure);
                     setStatus(getString(R.string.status_backup_failed, formatStatusTime(attempt)),
@@ -1297,35 +1302,48 @@ public class MainActivity extends Activity {
     }
 
     private void inspectRestore(char[] password) {
-        final Uri source = selectedUri;
-        setBusy(true, getString(R.string.status_checking_restore));
-        executor.execute(() -> {
-            try {
-                ArchiveFormat.PreparedRestore prepared = ArchiveFormat.prepareRestore(this, source, password);
-                runOnUiThread(() -> {
-                    setBusy(false, getString(R.string.status_ready));
-                    pendingRestore = prepared;
-                    showRestoreSelection(prepared);
-                });
-            } catch (Exception error) {
-                final String failure = ArchiveCrypto.isAuthenticationFailure(error)
-                        ? getString(R.string.error_wrong_password) : getString(R.string.error_no_source);
-                runOnUiThread(() -> { setBusy(false, failure);
-                    Toast.makeText(this, failure, Toast.LENGTH_LONG).show(); });
-            }
-        });
+        restoreSession.inspect(getApplicationContext(), RESTORE_PREVIEW_EXECUTOR, password);
     }
 
-    private void showRestoreSelection(ArchiveFormat.PreparedRestore prepared) {
+    private void dismissRestoreDialog() {
+        if (restoreDialog == null) return;
+        restoreDialog.dismiss();
+        restoreDialog = null;
+    }
+
+    private void renderRestore() {
+        RestoreSession session = restoreSession;
+        if (!resumed || session == null) return;
+        if (renderedRestoreStep != session.step) {
+            dismissRestoreDialog();
+            renderedRestoreStep = session.step;
+            if (!session.isWorking() && operationBusy) setBusy(false, getString(R.string.status_ready));
+            switch (session.step) {
+                case PASSWORD -> askRestorePassword(session);
+                case HEADER, INSPECTING -> setBusy(true, getString(R.string.status_checking_restore));
+                case SELECTION -> showRestoreSelection(session);
+                case ROLE_PROMPT -> showRestoreSmsRolePrompt(session);
+                case WRITING -> setBusy(true, getString(R.string.status_restoring));
+                case DONE -> finishRestore(session);
+                default -> { } // Android owns the permission/role request UI.
+            }
+        }
+        if (session.step == RestoreSession.Step.WRITING) {
+            operationProgress.setIndeterminate(session.totalRecords == 0);
+            operationProgress.setMax(Math.max(1, session.totalRecords));
+            operationProgress.setProgress(session.completedRecords);
+            if (session.totalRecords > 0) {
+                operationMessage.setText(getString(R.string.restore_progress,
+                        session.completedRecords, session.totalRecords));
+            }
+        }
+    }
+
+    private void showRestoreSelection(RestoreSession session) {
+        ArchiveFormat.PreparedRestore prepared = session.prepared;
         int smsCount = prepared.summary.smsCount;
         int callsCount = prepared.summary.callsCount;
         int messageCount = smsCount + prepared.summary.mmsCount + prepared.summary.rcsCount;
-        if (messageCount == 0 && callsCount == 0) {
-            prepared.close();
-            if (pendingRestore == prepared) pendingRestore = null;
-            Toast.makeText(this, getString(R.string.restore_no_records), Toast.LENGTH_LONG).show();
-            return;
-        }
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -1345,15 +1363,17 @@ public class MainActivity extends Activity {
         String callsLabel = getString(R.string.restore_calls_option, callsCount);
         CheckBox sms = new CheckBox(this);
         CheckBox calls = new CheckBox(this);
-        sms.setChecked(messageCount > 0);
-        calls.setChecked(callsCount > 0);
+        sms.setChecked(session.sms);
+        calls.setChecked(session.calls);
+        sms.setOnCheckedChangeListener((button, checked) -> session.sms = checked);
+        calls.setOnCheckedChangeListener((button, checked) -> session.calls = checked);
         sms.setContentDescription(smsLabel);
         calls.setContentDescription(callsLabel);
         if (android.os.Build.VERSION.SDK_INT >= 21) {
             sms.setButtonTintList(android.content.res.ColorStateList.valueOf(color(R.color.sms_blue)));
             calls.setButtonTintList(android.content.res.ColorStateList.valueOf(color(R.color.call_orange)));
         }
-        sms.setEnabled(smsCount > 0);
+        sms.setEnabled(messageCount > 0);
         calls.setEnabled(callsCount > 0);
         LinearLayout smsRow = restoreOptionRow(sms, smsLabel);
         LinearLayout callsRow = restoreOptionRow(calls, callsLabel);
@@ -1363,18 +1383,18 @@ public class MainActivity extends Activity {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(getString(R.string.restore_choose_title))
                 .setView(content)
-                .setNegativeButton(getString(R.string.action_cancel), (d, w) -> closePendingRestore(prepared))
+                .setNegativeButton(getString(R.string.action_cancel), (d, w) -> cancelRestore(session))
                 .setPositiveButton(getString(R.string.action_restore), null)
                 .create();
-        dialog.setOnCancelListener(d -> closePendingRestore(prepared));
+        dialog.setOnCancelListener(d -> cancelRestore(session));
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            if (!sms.isChecked() && !calls.isChecked()) {
+            if (!session.sms && !session.calls) {
                 Toast.makeText(this, getString(R.string.restore_choose_one), Toast.LENGTH_SHORT).show();
                 return;
             }
-            dialog.dismiss();
-            startSelectedRestore(prepared, sms.isChecked(), calls.isChecked());
+            requestRestorePermissions(session);
         }));
+        restoreDialog = dialog;
         dialog.show();
     }
 
@@ -1384,92 +1404,88 @@ public class MainActivity extends Activity {
         row.addView(box, new LinearLayout.LayoutParams(dp(48), dp(52)));
         TextView words = text(label, 14, color(R.color.text_primary));
         row.addView(words, new LinearLayout.LayoutParams(0, -1, 1));
-        row.setOnClickListener(v -> box.toggle());
+        row.setOnClickListener(v -> { if (box.isEnabled()) box.toggle(); });
         return row;
     }
 
-    private void closePendingRestore(ArchiveFormat.PreparedRestore prepared) {
-        prepared.close();
-        if (retainedRestoreAcrossSmsRole == prepared) retainedRestoreAcrossSmsRole = null;
-        if (pendingRestore == prepared) pendingRestore = null;
+    private void cancelRestore(RestoreSession session) {
+        if (restoreSession != session) return;
+        restoreSession = null;
+        renderedRestoreStep = null;
+        session.abandon();
+        dismissRestoreDialog();
+        updateOperationControls();
     }
 
-    private void startSelectedRestore(ArchiveFormat.PreparedRestore prepared,
-            boolean restoreSms, boolean restoreCalls) {
-        String[] readPermissions = restoreReadPermissions(restoreSms, restoreCalls);
+    private void requestRestorePermissions(RestoreSession session) {
+        String[] readPermissions = restoreReadPermissions(session);
         if (!hasPermissions(readPermissions)) {
-            pendingRestore = prepared;
-            pendingRestoreSms = restoreSms;
-            pendingRestoreCalls = restoreCalls;
-            pendingRestoreWritePermission = false;
+            session.step = RestoreSession.Step.READ_PERMISSION;
+            renderRestore();
             requestPermissions(readPermissions, REQUEST_RESTORE_PERMISSIONS);
             return;
         }
-        if (restoreCalls && checkSelfPermission(Manifest.permission.WRITE_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
-            pendingRestore = prepared;
-            pendingRestoreSms = restoreSms;
-            pendingRestoreCalls = restoreCalls;
-            pendingRestoreWritePermission = true;
+        if (session.calls && checkSelfPermission(Manifest.permission.WRITE_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            session.step = RestoreSession.Step.WRITE_PERMISSION;
+            renderRestore();
             requestPermissions(new String[]{Manifest.permission.WRITE_CALL_LOG}, REQUEST_RESTORE_WRITE);
             return;
         }
-        continueSelectedRestore(prepared, restoreSms, restoreCalls);
+        continueSelectedRestore(session);
     }
 
-    private String[] restoreReadPermissions(boolean restoreSms, boolean restoreCalls) {
+    private String[] restoreReadPermissions(RestoreSession session) {
         List<String> permissions = new ArrayList<>();
-        if (restoreSms) permissions.add(Manifest.permission.READ_SMS);
-        if (restoreCalls) permissions.add(Manifest.permission.READ_CALL_LOG);
+        if (session.sms) permissions.add(Manifest.permission.READ_SMS);
+        if (session.calls) permissions.add(Manifest.permission.READ_CALL_LOG);
         return permissions.toArray(new String[0]);
     }
 
-    private void continueSelectedRestore(ArchiveFormat.PreparedRestore prepared,
-            boolean restoreSms, boolean restoreCalls) {
-        if (!restoreSms || isDefaultSmsApp()) {
-            if (pendingRestore == prepared) pendingRestore = null;
-            runRestore(prepared, restoreSms, restoreCalls);
+    private void handleRestorePermissionsResult(int requestCode, int[] grants) {
+        RestoreSession session = restoreSession;
+        boolean read = requestCode == REQUEST_RESTORE_PERMISSIONS;
+        if (session == null || session.step != (read ? RestoreSession.Step.READ_PERMISSION
+                : RestoreSession.Step.WRITE_PERMISSION)) return;
+        String[] required = read ? restoreReadPermissions(session) : new String[]{Manifest.permission.WRITE_CALL_LOG};
+        if (grants.length == 0 || !hasPermissions(required)) {
+            session.finish(R.string.permission_denied);
+        } else {
+            requestRestorePermissions(session);
+        }
+    }
+
+    private void continueSelectedRestore(RestoreSession session) {
+        if (!session.sms || isDefaultSmsApp()) {
+            runRestore(session);
             return;
         }
-        pendingRestoreSms = restoreSms;
-        pendingRestoreCalls = restoreCalls;
+        session.step = RestoreSession.Step.ROLE_PROMPT;
+        renderRestore();
+    }
+
+    private void showRestoreSmsRolePrompt(RestoreSession session) {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(getString(R.string.restore_default_sms_title))
                 .setMessage(getString(R.string.restore_default_sms_message))
-                .setNegativeButton(getString(R.string.restore_default_sms_cancel), (d, w) -> cancelPendingSmsRestore())
+                .setNegativeButton(getString(R.string.restore_default_sms_cancel), (d, w) -> cancelRestore(session))
                 .setPositiveButton(getString(R.string.restore_default_sms_action), (d, w) -> {
-                    previousSmsPackage = defaultSmsPackage();
-                    pendingRestoreAfterSmsRole = true;
-                    temporarilyChangedSmsRole = true;
-                    getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit()
-                            .putBoolean("switch_back_pending", true)
-                            .putString("switch_back_reason", "restore_failed")
-                            .putString("previous_package", previousSmsPackage).apply();
+                    if (!session.armSmsSwitchBack(getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE),
+                            defaultSmsPackage())) {
+                        session.finish(R.string.error_generic);
+                        return;
+                    }
+                    session.step = RestoreSession.Step.ROLE_REQUEST;
+                    renderRestore();
                     if (!requestDefaultSmsRole()) {
-                        cancelPendingSmsRestore();
-                        showSmsRoleFailure();
+                        if (!isDefaultSmsApp()) {
+                            getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE).edit().clear().apply();
+                        }
+                        session.finish(R.string.restore_default_sms_unavailable_message);
                     }
                 }).create();
-        dialog.setOnCancelListener(d -> cancelPendingSmsRestore());
+        dialog.setOnCancelListener(d -> cancelRestore(session));
+        restoreDialog = dialog;
         dialog.show();
-    }
-
-    private void cancelPendingSmsRestore() {
-        boolean needsSwitchBack = temporarilyChangedSmsRole && isDefaultSmsApp();
-        pendingRestoreAfterSmsRole = false;
-        pendingRestoreSms = false;
-        pendingRestoreCalls = false;
-        pendingRestoreWritePermission = false;
-        temporarilyChangedSmsRole = false;
-        previousSmsPackage = null;
-        SharedPreferences.Editor roleEditor = getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit();
-        if (needsSwitchBack) {
-            roleEditor.putBoolean("switch_back_pending", true)
-                    .putString("switch_back_reason", "restore_failed");
-        } else {
-            roleEditor.clear();
-        }
-        roleEditor.apply();
-        if (pendingRestore != null) closePendingRestore(pendingRestore);
     }
 
     private void showSmsRoleFailure() {
@@ -1515,13 +1531,14 @@ public class MainActivity extends Activity {
     }
 
     private void handleSmsRoleResult(int resultCode) {
-        if (pendingRestoreAfterSmsRole && pendingRestore != null) {
-            // The result code can arrive before the role/provider state has settled;
-            // verify the role itself before changing any phone data.
-            checkSmsRoleAndContinue(0);
-        } else if (pendingRestoreAfterSmsRole) {
-            cancelPendingSmsRestore();
-            showSmsRoleFailure();
+        RestoreSession session = restoreSession;
+        if (session != null && session.step == RestoreSession.Step.ROLE_REQUEST) {
+            // The chooser may return before the new holder is visible.
+            session.smsRoleResultAccepted = resultCode == RESULT_OK;
+            session.smsRoleCheckDeadline = SystemClock.elapsedRealtime()
+                    + MAX_SMS_ROLE_CHECKS * SMS_ROLE_CHECK_DELAY_MS;
+            session.step = RestoreSession.Step.ROLE_CHECK;
+            checkSmsRoleAndContinue();
         } else if (restrictedSmsRoleRequestPending) {
             checkRestrictedSmsRoleAndContinue(0);
         }
@@ -1551,37 +1568,22 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void continueSmsRestore() {
-        if (!pendingRestoreAfterSmsRole || pendingRestore == null) return;
-        pendingRestoreAfterSmsRole = false;
-        ArchiveFormat.PreparedRestore prepared = pendingRestore;
-        pendingRestore = null;
-        if (retainedRestoreAcrossSmsRole == prepared) retainedRestoreAcrossSmsRole = null;
-        runRestore(prepared, pendingRestoreSms, pendingRestoreCalls);
-        pendingRestoreSms = false;
-        pendingRestoreCalls = false;
-    }
-
-    private void checkSmsRoleAndContinue(int attempt) {
-        if (!pendingRestoreAfterSmsRole || pendingRestore == null) return;
+    private void checkSmsRoleAndContinue() {
+        RestoreSession session = restoreSession;
+        if (!resumed || session == null || session.step != RestoreSession.Step.ROLE_CHECK) return;
         if (isDefaultSmsApp()) {
-            pendingRestoreAfterSmsRole = false;
-            ArchiveFormat.PreparedRestore prepared = pendingRestore;
-            pendingRestore = null;
-            if (retainedRestoreAcrossSmsRole == prepared) retainedRestoreAcrossSmsRole = null;
-            runRestore(prepared, pendingRestoreSms, pendingRestoreCalls);
-            pendingRestoreSms = false;
-            pendingRestoreCalls = false;
-        } else if (attempt < MAX_SMS_ROLE_CHECKS) {
-            new Handler(Looper.getMainLooper()).postDelayed(
-                    () -> checkSmsRoleAndContinue(attempt + 1), SMS_ROLE_CHECK_DELAY_MS);
+            if (session.smsRoleResultAccepted) runRestore(session);
+            else session.finish(R.string.restore_default_sms_unavailable_message);
+        } else if (SystemClock.elapsedRealtime() < session.smsRoleCheckDeadline) {
+            restoreRoleChecks.postDelayed(verifyRestoreSmsRole, SMS_ROLE_CHECK_DELAY_MS);
         } else {
-            cancelPendingSmsRestore();
-            showSmsRoleFailure();
+            // The chooser existed, so keep the marker in case the role becomes visible later.
+            session.finish(R.string.restore_default_sms_unavailable_message);
         }
     }
 
     private void openPreviousSmsAppChooser() {
+        if (RestoreSession.isSmsRestoreActive()) return;
         try {
             Intent selector = new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS);
             startActivityForResult(selector, REQUEST_SMS_SWITCH_BACK);
@@ -1598,7 +1600,7 @@ public class MainActivity extends Activity {
 
     private void showSwitchBackDialog() {
         switchBackDialogShown = true;
-        SharedPreferences rolePrefs = getSharedPreferences("restore_sms_role", MODE_PRIVATE);
+        SharedPreferences rolePrefs = getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE);
         String reason = rolePrefs.getString("switch_back_reason", "restore");
         boolean backup = "backup".equals(reason);
         boolean restricted = "restricted".equals(reason);
@@ -1618,79 +1620,50 @@ public class MainActivity extends Activity {
         dialog.show();
     }
 
-    private void openSmsSettingsAfterRestore() {
-        getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit()
-                .putString("switch_back_reason", "restore").apply();
-        showSwitchBackDialog();
+    private void runRestore(RestoreSession session) {
+        // Also remember to switch back if this app already held the role at the start.
+        if (session.sms && !session.armSmsSwitchBack(getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE), null)) {
+            session.finish(R.string.error_generic);
+            return;
+        }
+        session.write(getApplicationContext(), RESTORE_WRITE_EXECUTOR);
     }
 
-    private void runRestore(ArchiveFormat.PreparedRestore prepared,
-            boolean restoreSms, boolean restoreCalls) {
-        // SMS restore may have started with this app already holding the role
-        // after an earlier restore attempt. The user still explicitly asked to
-        // choose their preferred SMS app again after every SMS restore.
-        final boolean needsSmsSwitchBack = restoreSms;
-        final int totalRecords = (restoreSms ? prepared.summary.smsCount + prepared.summary.mmsCount + prepared.summary.rcsCount : 0)
-                + (restoreCalls ? prepared.summary.callsCount : 0);
-        setBusy(true, getString(R.string.status_restoring));
-        operationProgress.setIndeterminate(totalRecords == 0);
-        if (totalRecords > 0) {
-            operationProgress.setMax(totalRecords);
-            operationProgress.setProgress(0);
-        }
-        executor.execute(() -> {
-            RestoreEngine.RestoreSummary summary = null;
-            Exception failure = null;
-            try {
-                summary = prepared.restore(this, restoreSms, restoreCalls,
-                        (completed, total) -> {
-                            if (completed != total && completed != 1 && completed % 10 != 0) return;
-                            runOnUiThread(() -> {
-                                if (operationProgress != null) {
-                                    operationProgress.setIndeterminate(false);
-                                    operationProgress.setMax(Math.max(1, total));
-                                    operationProgress.setProgress(completed);
-                                }
-                                if (operationMessage != null)
-                                    operationMessage.setText(getString(R.string.restore_progress, completed, total));
-                            });
-                        });
-            } catch (Exception error) {
-                failure = error;
-            } finally {
-                // Do not publish completion until the authenticated payload has been closed and
-                // all restore-owned resources have been released.
-                prepared.close();
+    private void finishRestore(RestoreSession session) {
+        cancelRestore(session); // Closes any preview payload still owned by the session.
+        RestoreEngine.RestoreSummary completed = session.summary;
+        if (completed != null) {
+            boolean extended = completed.mmsAdded > 0 || completed.rcsAdded > 0;
+            int restoreText = extended
+                    ? (completed.failed == 0 ? R.string.restore_summary_extended : R.string.restore_summary_extended_failed)
+                    : (completed.failed == 0 ? R.string.restore_summary : R.string.restore_summary_failed);
+            int skipped = completed.failed == 0 ? completed.duplicates : completed.failed;
+            setStatus(extended
+                    ? getString(restoreText, completed.smsAdded, completed.callsAdded, completed.mmsAdded, completed.rcsAdded, skipped)
+                    : getString(restoreText, completed.smsAdded, completed.callsAdded, skipped), null);
+            if (completed.failed == 0) {
+                Toast.makeText(this, getString(R.string.notice_restore_complete_title), Toast.LENGTH_SHORT).show();
             }
-            if (failure == null) {
-                RestoreEngine.RestoreSummary completed = summary;
-                runOnUiThread(() -> {
-                    int restoreText = completed.mmsAdded > 0 || completed.rcsAdded > 0
-                            ? (completed.failed == 0 ? R.string.restore_summary_extended : R.string.restore_summary_extended_failed)
-                            : (completed.failed == 0 ? R.string.restore_summary : R.string.restore_summary_failed);
-                    setBusy(false, completed.mmsAdded > 0 || completed.rcsAdded > 0
-                            ? getString(restoreText, completed.smsAdded, completed.callsAdded, completed.mmsAdded, completed.rcsAdded,
-                            completed.failed == 0 ? completed.duplicates : completed.failed)
-                            : getString(restoreText, completed.smsAdded, completed.callsAdded,
-                            completed.failed == 0 ? completed.duplicates : completed.failed));
-                    Toast.makeText(this, getString(R.string.notice_restore_complete_title), Toast.LENGTH_SHORT).show();
-                    if (needsSmsSwitchBack) {
-                        getSharedPreferences("restore_sms_role", MODE_PRIVATE)
-                                .edit().putBoolean("switch_back_pending", true).apply();
-                        openSmsSettingsAfterRestore();
-                    }
-                });
+        } else if (session.previewFailed) {
+            setStatus(getString(session.error), null);
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.restore_preview_error_title)
+                    .setMessage(session.error)
+                    .setPositiveButton(R.string.action_ok, null)
+                    .show();
+        } else if (session.error == R.string.restore_default_sms_unavailable_message) {
+            if (!isDefaultSmsApp()) showSmsRoleFailure();
+        } else if (session.error != 0) {
+            if (session.error == R.string.error_generic) {
+                setStatus(getString(R.string.error_generic), null);
+                Toast.makeText(this, getString(R.string.notice_failed_title), Toast.LENGTH_LONG).show();
             } else {
-                runOnUiThread(() -> { setBusy(false, getString(R.string.error_generic));
-                    Toast.makeText(this, getString(R.string.notice_failed_title), Toast.LENGTH_LONG).show();
-                    if (needsSmsSwitchBack && temporarilyChangedSmsRole && isDefaultSmsApp()) {
-                        getSharedPreferences("restore_sms_role", MODE_PRIVATE).edit()
-                                .putBoolean("switch_back_pending", true)
-                                .putString("switch_back_reason", "restore_failed").apply();
-                        showSwitchBackDialog();
-                    }
-                });
+                Toast.makeText(this, getString(session.error), Toast.LENGTH_LONG).show();
             }
-        });
+        }
+        if (session.smsRecoveryArmed) {
+            switchBackDialogShown = false;
+            maybeOpenPendingSmsSwitchBack();
+        }
     }
 }

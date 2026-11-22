@@ -107,6 +107,11 @@
     <string name="restore_no_records">این پشتیبان پیامک یا گزارش تماسی ندارد.</string>
     <string name="error_generic">عملیات با ایمنی کامل انجام نشد.</string>
     <string name="error_wrong_password">رمز عبور نادرست یا پشتیبان نامعتبر</string>
+    <string name="restore_preview_error_title">بررسی پشتیبان ممکن نبود</string>
+    <string name="restore_error_archive_too_large">این پشتیبان آن‌قدر حجیم است که نمی‌توان آن را بازگرداند. فایل اصلی را نگه دارید. اگر هنوز دستگاه مبدأ را در اختیار دارید، سعی کنید از پیام‌ها و گزارش تماس‌ها جداگانه پشتیبان بگیرید.</string>
+    <string name="restore_error_encrypted_too_large">این پشتیبان رمزگذاری‌شده آن‌قدر حجیم است که نمی‌توان آن را در این دستگاه بازگرداند. فایل اصلی را نگه دارید. شاید بتوانید آن را در دستگاهی باز کنید که حافظهٔ بیشتری در اختیار برنامه می‌گذارد.</string>
+    <string name="backup_error_archive_too_large">به دلیل حجم زیاد پشتیبان، پشتیبان‌گیری کامل نمی‌شود. سعی کنید از پیام‌ها و گزارش تماس‌ها جداگانه پشتیبان بگیرید.</string>
+    <string name="backup_error_encrypted_too_large">حجم پشتیبان رمزگذاری‌شده برای این دستگاه بیش از حد زیاد است. سعی کنید از پیام‌ها و گزارش تماس‌ها جداگانه پشتیبان بگیرید.</string>
     <string name="error_no_destination">محل انتخاب‌شده باز نشد.</string>
     <string name="error_no_source">پشتیبان انتخاب‌شده باز نشد.</string>
     <string name="about_title">درباره</string>

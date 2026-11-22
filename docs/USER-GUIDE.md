@@ -27,6 +27,8 @@ Each backup is a versioned Libre SMS Backup archive. An unencrypted `.lsb` can b
 
 Encryption is off by default. Turning it on or off only affects future backups. Keep the original password separately from the archive: a different phone cannot retrieve it for you, and the project cannot recover it. Clearing app data removes the app's settings and saved password but does not remove the archives from your chosen folder.
 
+Very large backups can exceed the app's size limit. The limit for password-protected backups depends on how much memory Android allows the app to use. If a backup is too large to create, try backing up messages and call logs separately. If an existing archive is too large to restore, keep the original file.
+
 ## Restore or move to a new phone
 
 1. Before resetting or replacing your phone, copy a recent archive somewhere you can reach without it. Keep the password if the archive is encrypted.

@@ -107,6 +107,11 @@
     <string name="restore_no_records">Dieses Backup enthält keine SMS oder Anruflisten.</string>
     <string name="error_generic">Der Vorgang konnte nicht sicher abgeschlossen werden.</string>
     <string name="error_wrong_password">Falsches Passwort oder ungültige Sicherung</string>
+    <string name="restore_preview_error_title">Backup konnte nicht geprüft werden</string>
+    <string name="restore_error_archive_too_large">Dieses Backup ist zu groß für die Wiederherstellung. Bewahre die Originaldatei auf. Wenn du das ursprüngliche Gerät noch hast, versuche, Nachrichten und Anruflisten getrennt zu sichern.</string>
+    <string name="restore_error_encrypted_too_large">Dieses verschlüsselte Backup ist zu groß, um es auf diesem Gerät wiederherzustellen. Bewahre die Originaldatei auf. Möglicherweise kannst du sie auf einem Gerät öffnen, auf dem der App mehr Arbeitsspeicher zur Verfügung steht.</string>
+    <string name="backup_error_archive_too_large">Das Backup kann nicht abgeschlossen werden, weil es zu groß ist. Versuche, Nachrichten und Anruflisten getrennt zu sichern.</string>
+    <string name="backup_error_encrypted_too_large">Das verschlüsselte Backup ist zu groß für dieses Gerät. Versuche, Nachrichten und Anruflisten getrennt zu sichern.</string>
     <string name="error_no_destination">Der ausgewählte Speicherort konnte nicht geöffnet werden.</string>
     <string name="error_no_source">Das ausgewählte Backup konnte nicht geöffnet werden.</string>
     <string name="about_title">Info</string>

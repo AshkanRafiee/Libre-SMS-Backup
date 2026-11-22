@@ -111,6 +111,11 @@
     <string name="restore_no_records">此备份不包含短信或通话记录。</string>
     <string name="error_generic">无法安全完成操作。</string>
     <string name="error_wrong_password">密码错误或备份文件无效</string>
+    <string name="restore_preview_error_title">无法检查备份</string>
+    <string name="restore_error_archive_too_large">此备份过大，无法恢复。请保留原始文件。如果您仍有原来的设备，请尝试分别备份消息和通话记录。</string>
+    <string name="restore_error_encrypted_too_large">此加密备份过大，无法在此设备上恢复。请保留原始文件。如果另一台设备能为应用提供更多可用内存，您或许可以在那台设备上打开此文件。</string>
+    <string name="backup_error_archive_too_large">备份过大，无法完成。请尝试分别备份消息和通话记录。</string>
+    <string name="backup_error_encrypted_too_large">加密备份过大，此设备无法处理。请尝试分别备份消息和通话记录。</string>
     <string name="error_no_destination">无法打开所选位置。</string>
     <string name="error_no_source">无法打开所选备份。</string>
     <string name="about_title">关于</string>

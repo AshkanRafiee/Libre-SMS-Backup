@@ -111,6 +111,11 @@
     <string name="restore_no_records">Bu yedekte SMS veya arama kaydı yok.</string>
     <string name="error_generic">İşlem güvenli şekilde tamamlanamadı.</string>
     <string name="error_wrong_password">Yanlış parola veya geçersiz yedekleme</string>
+    <string name="restore_preview_error_title">Yedek denetlenemedi</string>
+    <string name="restore_error_archive_too_large">Bu yedek geri yüklenemeyecek kadar büyük. Orijinal dosyayı saklayın. Kaynak cihaz hâlâ elinizdeyse mesajları ve arama kayıtlarını ayrı ayrı yedeklemeyi deneyin.</string>
+    <string name="restore_error_encrypted_too_large">Bu şifrelenmiş yedek, bu cihazda geri yüklenemeyecek kadar büyük. Orijinal dosyayı saklayın. Uygulamaya daha fazla bellek ayırabilen bir cihazda dosyayı açabilirsiniz.</string>
+    <string name="backup_error_archive_too_large">Yedek çok büyük olduğu için yedekleme tamamlanamadı. Mesajları ve arama kayıtlarını ayrı ayrı yedeklemeyi deneyin.</string>
+    <string name="backup_error_encrypted_too_large">Şifrelenmiş yedek bu cihaz için çok büyük. Mesajları ve arama kayıtlarını ayrı ayrı yedeklemeyi deneyin.</string>
     <string name="error_no_destination">Seçilen konum açılamadı.</string>
     <string name="error_no_source">Seçilen yedek açılamadı.</string>
     <string name="about_title">Hakkında</string>

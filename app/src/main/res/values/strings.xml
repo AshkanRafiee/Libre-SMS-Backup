@@ -175,6 +175,11 @@
     <string name="error_wrong_password">Wrong password or invalid backup</string>
     <string name="error_no_destination">Could not open the selected destination</string>
     <string name="error_no_source">Could not open the selected backup</string>
+    <string name="restore_preview_error_title">Could not check backup</string>
+    <string name="restore_error_archive_too_large">This backup is too large to restore. Keep the original file. If you still have the source device, try backing up messages and call logs separately.</string>
+    <string name="restore_error_encrypted_too_large">This encrypted backup is too large to restore on this device. Keep the original file. You may be able to open it on a device with more memory available to the app.</string>
+    <string name="backup_error_archive_too_large">The backup is too large to finish. Try backing up messages and call logs separately.</string>
+    <string name="backup_error_encrypted_too_large">The encrypted backup is too large for this device. Try backing up messages and call logs separately.</string>
     <string name="about_title">About</string>
     <string name="about_section_heading">ABOUT THIS APP</string>
     <string name="about_section_body">Libre SMS Backup is a free, open-source Android app for keeping SMS, MMS, and call records under your control. It works locally, optionally protects archives with a password, and has no account, cloud service, tracker, or network permission.</string>

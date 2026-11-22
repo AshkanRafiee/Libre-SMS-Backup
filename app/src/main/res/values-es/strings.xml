@@ -107,6 +107,11 @@
     <string name="restore_no_records">Esta copia no contiene SMS ni registros de llamadas.</string>
     <string name="error_generic">La operación no se pudo completar de forma segura.</string>
     <string name="error_wrong_password">Contraseña incorrecta o copia de seguridad no válida</string>
+    <string name="restore_preview_error_title">No se pudo comprobar la copia</string>
+    <string name="restore_error_archive_too_large">Esta copia es demasiado grande para restaurarla. Conserva el archivo original. Si aún tienes el dispositivo de origen, prueba a hacer copias de los mensajes y los registros de llamadas por separado.</string>
+    <string name="restore_error_encrypted_too_large">Esta copia cifrada es demasiado grande para restaurarla en este dispositivo. Conserva el archivo original. Tal vez puedas abrirlo en un dispositivo que tenga más memoria disponible para la app.</string>
+    <string name="backup_error_archive_too_large">La copia es demasiado grande y no se puede completar. Prueba a hacer copias de los mensajes y los registros de llamadas por separado.</string>
+    <string name="backup_error_encrypted_too_large">La copia cifrada es demasiado grande para este dispositivo. Prueba a hacer copias de los mensajes y los registros de llamadas por separado.</string>
     <string name="error_no_destination">No se pudo abrir la ubicación elegida.</string>
     <string name="error_no_source">No se pudo abrir la copia elegida.</string>
     <string name="about_title">Acerca de</string>

@@ -107,6 +107,11 @@
     <string name="restore_no_records">Cette sauvegarde ne contient ni SMS ni journaux d’appels.</string>
     <string name="error_generic">L’opération n’a pas pu être terminée en toute sécurité.</string>
     <string name="error_wrong_password">Mot de passe incorrect ou sauvegarde invalide</string>
+    <string name="restore_preview_error_title">Impossible de vérifier la sauvegarde</string>
+    <string name="restore_error_archive_too_large">Cette sauvegarde est trop volumineuse pour être restaurée. Conservez le fichier d’origine. Si vous avez encore l’appareil d’origine, essayez de sauvegarder séparément les messages et les journaux d’appels.</string>
+    <string name="restore_error_encrypted_too_large">Cette sauvegarde chiffrée est trop volumineuse pour être restaurée sur cet appareil. Conservez le fichier d’origine. Vous pourrez peut-être l’ouvrir sur un appareil où l’application dispose de plus de mémoire.</string>
+    <string name="backup_error_archive_too_large">La sauvegarde est trop volumineuse pour être menée à terme. Essayez de sauvegarder séparément les messages et les journaux d’appels.</string>
+    <string name="backup_error_encrypted_too_large">La sauvegarde chiffrée est trop volumineuse pour cet appareil. Essayez de sauvegarder séparément les messages et les journaux d’appels.</string>
     <string name="error_no_destination">Impossible d’ouvrir l’emplacement choisi.</string>
     <string name="error_no_source">Impossible d’ouvrir la sauvegarde choisie.</string>
     <string name="about_title">À propos</string>
