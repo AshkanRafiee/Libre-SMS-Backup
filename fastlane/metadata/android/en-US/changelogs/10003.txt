@@ -1,0 +1,2 @@
+Fixed a false “Restore stopped” message while messages were still being restored.
+Larger unencrypted backups can now be restored. If a backup is too large or cannot be opened, the app shows a clearer error.
