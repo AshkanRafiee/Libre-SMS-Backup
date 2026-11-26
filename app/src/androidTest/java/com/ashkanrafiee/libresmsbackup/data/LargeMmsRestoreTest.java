@@ -416,6 +416,8 @@ public class LargeMmsRestoreTest extends TestCase {
         @Override public Uri insert(Uri uri, ContentValues values) {
             if (Telephony.Mms.CONTENT_URI.equals(uri)) {
                 message = new ContentValues(values);
+                String kind = values.getAsString(Telephony.Mms.MESSAGE_TYPE);
+                if ("128.0".equals(kind)) message.put(Telephony.Mms.MESSAGE_TYPE, 128); // SQLite integer affinity.
                 long id = 42L + messages.size();
                 message.put("_id", id);
                 messages.add(message);

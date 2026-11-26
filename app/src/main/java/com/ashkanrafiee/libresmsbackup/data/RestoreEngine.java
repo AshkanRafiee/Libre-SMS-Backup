@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.security.DigestOutputStream;
@@ -844,7 +845,8 @@ public final class RestoreEngine {
             while (cursor.moveToNext()) {
                 StringBuilder key = new StringBuilder();
                 for (int i = 0; i < MMS_KEY_COLUMNS.length; i++) {
-                    appendKeyField(key, cursor.isNull(i) ? null : cursor.getString(i));
+                    appendKeyField(key, normalizedMmsKeyField(MMS_KEY_COLUMNS[i],
+                            cursor.isNull(i) ? null : cursor.getString(i)));
                 }
                 String header = compactKey(key, digest);
                 index.addMmsCandidate(header, cursor.getLong(MMS_KEY_COLUMNS.length));
@@ -857,8 +859,23 @@ public final class RestoreEngine {
 
     private static String mmsKey(ContentValues values) {
         StringBuilder key = new StringBuilder();
-        for (String name : MMS_KEY_COLUMNS) appendKeyField(key, values.getAsString(name));
+        for (String name : MMS_KEY_COLUMNS) {
+            appendKeyField(key, normalizedMmsKeyField(name, values.getAsString(name)));
+        }
         return compactKey(key, keyDigest());
+    }
+
+    private static String normalizedMmsKeyField(String name, String value) {
+        if (value == null || value.length() > 64) return value;
+        if (!Telephony.Mms.DATE.equals(name) && !Telephony.Mms.MESSAGE_BOX.equals(name)
+                && !Telephony.Mms.MESSAGE_TYPE.equals(name) && !Telephony.Mms.SUBJECT_CHARSET.equals(name)) {
+            return value;
+        }
+        try {
+            return Long.toString(new BigDecimal(value.trim()).longValueExact());
+        } catch (NumberFormatException | ArithmeticException nonInteger) {
+            return value;
+        }
     }
 
     private static final class MmsPart {
