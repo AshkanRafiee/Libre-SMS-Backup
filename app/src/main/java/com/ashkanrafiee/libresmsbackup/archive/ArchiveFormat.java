@@ -579,7 +579,7 @@ public final class ArchiveFormat {
 
     private static void copyFileToUri(Context context, File source, Uri destination) throws IOException {
         try (InputStream input = new FileInputStream(source);
-             OutputStream output = context.getContentResolver().openOutputStream(destination, "w")) {
+             OutputStream output = context.getContentResolver().openOutputStream(destination, "wt")) {
             if (output == null) throw new IOException("cannot open destination");
             byte[] buffer = new byte[32 * 1024];
             int count;
