@@ -70,6 +70,7 @@ public class AttachmentJsonInputTest extends TestCase {
                 "{\"mms\":{\"messages\":[{\"parts\":[{\"dataBase64\":[0,1]}]}]}}",
                 "{\"mms\":{\"messages\":[{\"row\":{},\"\\u0072ow\":{}}]}}",
                 "{\"mms\":{\"messages\":[{\"parts\":[{\"row\":{},\"row\":{}}]}]}}",
+                "{\"mms\":{\"messages\":[{\"addresses\":[{\"row\":{},\"row\":{}}]}]}}",
                 deep.toString(), excessiveFields.toString()}) {
             try {
                 transform(invalid.getBytes(StandardCharsets.UTF_8));

@@ -124,7 +124,8 @@ final class AttachmentJsonInput extends InputStream {
             int depth = scopes.size() - 1;
             if (depth >= 0 && ++fieldsAtDepth[depth] > MAX_OBJECT_FIELDS)
                 throw new IOException("backup object has too many fields");
-            if (pendingColon && (scope == Scope.MESSAGE || scope == Scope.PART) && matchesName("row")) {
+            if (pendingColon && (scope == Scope.MESSAGE || scope == Scope.PART || scope == Scope.ADDRESS)
+                    && matchesName("row")) {
                 if (mmsRowAtDepth[depth]) throw new IOException("duplicate MMS row");
                 mmsRowAtDepth[depth] = true;
             }
