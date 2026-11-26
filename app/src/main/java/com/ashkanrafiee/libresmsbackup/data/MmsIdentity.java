@@ -24,7 +24,6 @@ final class MmsIdentity {
             "cid", "cl", "ctt_s", "ctt_t", "text"};
     private static final Uri MMS_URI = Uri.parse("content://mms");
     private static final Uri PART_URI = Uri.withAppendedPath(MMS_URI, "part");
-    private static final int MAX_PART_BYTES = 64 * 1024 * 1024;
 
     private final List<String> addresses = new ArrayList<>();
     private final List<String> parts = new ArrayList<>();
@@ -136,7 +135,7 @@ final class MmsIdentity {
         MessageDigest digest = newDigest();
         try (InputStream input = resolver.openInputStream(uri)) {
             if (input == null) throw new IOException("MMS part data unavailable");
-            int remaining = MAX_PART_BYTES;
+            int remaining = ArchiveFormat.MAX_ATTACHMENT_BYTES;
             while (true) {
                 int count = input.read(buffer, 0, Math.min(buffer.length, remaining + 1));
                 if (count == -1) return digestKey(digest);

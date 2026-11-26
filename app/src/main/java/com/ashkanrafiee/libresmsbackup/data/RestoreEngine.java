@@ -12,6 +12,8 @@ import android.util.JsonReader;
 import android.util.JsonToken;
 import android.util.LruCache;
 
+import com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -34,12 +36,13 @@ public final class RestoreEngine {
     private static final String[] SMS_KEY_COLUMNS = {"address", "date", "type", "body"};
     private static final String[] CALL_KEY_COLUMNS = {"number", "date", "duration", "type"};
     private static final String[] MMS_KEY_COLUMNS = {Telephony.Mms.DATE, Telephony.Mms.MESSAGE_BOX,
-            Telephony.Mms.SUBJECT, Telephony.Mms.CONTENT_TYPE, Telephony.Mms.MESSAGE_ID, Telephony.Mms.TRANSACTION_ID};
+            Telephony.Mms.SUBJECT, Telephony.Mms.CONTENT_TYPE, Telephony.Mms.MESSAGE_ID, Telephony.Mms.TRANSACTION_ID,
+            Telephony.Mms.MESSAGE_TYPE, Telephony.Mms.SUBJECT_CHARSET, Telephony.Mms.CONTENT_LOCATION};
     // MMS PDU address types (WAP-209-MMSEncapsulation).
     private static final int MMS_FROM = 137;
     private static final int MMS_TO = 151;
     private static final int MMS_CC = 130;
-    private static final int MAX_MMS_PART_BYTES = 64 * 1024 * 1024;
+    private static final int MMS_SEND_REQUEST = 128;
     private static final int SMS_INDEX = 1;
     private static final int CALL_INDEX = 2;
     private static final int MMS_INDEX = 3;
@@ -66,13 +69,18 @@ public final class RestoreEngine {
         ArchiveSummary result = new ArchiveSummary();
         int schema = -1;
         try (JsonReader reader = openJson(plaintext)) {
+            Set<String> sections = new HashSet<>();
             reader.beginObject();
             while (reader.hasNext()) {
                 String name = reader.nextName();
+                if (("schema".equals(name) || "sms".equals(name) || "calls".equals(name)
+                        || "mms".equals(name) || "rcs".equals(name)) && !sections.add(name)) {
+                    throw new IOException("duplicate backup section");
+                }
                 if ("schema".equals(name)) schema = reader.nextInt();
                 else if ("sms".equals(name)) result.smsCount = countRecords(reader, result, true);
                 else if ("calls".equals(name)) result.callsCount = countRecords(reader, result, false);
-                else if ("mms".equals(name)) result.mmsCount = inspectMmsSection(reader);
+                else if ("mms".equals(name)) result.mmsCount = inspectMmsSection(reader, plaintext);
                 else if ("rcs".equals(name)) result.rcsCount = inspectRcsSection(reader);
                 else reader.skipValue();
             }
@@ -81,7 +89,7 @@ public final class RestoreEngine {
         } catch (IllegalStateException | IllegalArgumentException malformed) {
             throw new IOException("invalid backup payload structure");
         }
-        if (schema != com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat.PAYLOAD_SCHEMA)
+        if (schema != ArchiveFormat.PAYLOAD_SCHEMA)
             throw new IOException("unsupported backup payload version");
         return result;
     }
@@ -217,7 +225,7 @@ public final class RestoreEngine {
         while (reader.hasNext()) {
             String name = reader.nextName();
             JsonToken token = reader.peek();
-            if (token == JsonToken.NULL || isNonPortableColumn(name)
+            if (token == JsonToken.NULL || !isSafeColumnName(name) || isNonPortableColumn(name)
                     || (sms && !isRestorableSmsColumn(name))) {
                 reader.skipValue();
             } else if (token == JsonToken.BEGIN_OBJECT) {
@@ -238,20 +246,30 @@ public final class RestoreEngine {
         return date;
     }
 
-    private static int inspectMmsSection(JsonReader reader) throws IOException {
+    private static int inspectMmsSection(JsonReader reader, FileChannel plaintext) throws IOException {
         int count = 0;
+        boolean seenMessages = false;
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
             if ("messages".equals(name)) {
+                if (seenMessages) throw new IOException("duplicate MMS messages section");
+                seenMessages = true;
                 reader.beginArray();
                 while (reader.hasNext()) {
+                    Set<String> fields = new HashSet<>();
                     reader.beginObject();
                     while (reader.hasNext()) {
                         String field = reader.nextName();
+                        if (("row".equals(field) || "dateMs".equals(field) || "threadRecipients".equals(field)
+                                || "parts".equals(field) || "addresses".equals(field)) && !fields.add(field)) {
+                            throw new IOException("duplicate MMS message field");
+                        }
                         if ("row".equals(field)) inspectRecord(reader, false);
                         else if ("dateMs".equals(field)) reader.nextLong();
-                        else if ("parts".equals(field) || "addresses".equals(field)) inspectWrappedRecords(reader);
+                        else if ("threadRecipients".equals(field)) readThreadRecipients(reader);
+                        else if ("parts".equals(field)) inspectWrappedRecords(reader, plaintext);
+                        else if ("addresses".equals(field)) inspectWrappedRecords(reader, null);
                         else reader.skipValue();
                     }
                     reader.endObject();
@@ -266,25 +284,39 @@ public final class RestoreEngine {
 
     private static int inspectRcsSection(JsonReader reader) throws IOException {
         int count = 0;
+        boolean seenChats = false;
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
-            if ("chats".equals(name)) count = inspectWrappedRecords(reader);
-            else if ("files".equals(name)) inspectWrappedRecords(reader);
+            if ("chats".equals(name)) {
+                if (seenChats) throw new IOException("duplicate RCS chats section");
+                seenChats = true;
+                count = inspectWrappedRecords(reader, null);
+            } else if ("files".equals(name)) inspectWrappedRecords(reader, null);
             else reader.skipValue();
         }
         reader.endObject();
         return count;
     }
 
-    private static int inspectWrappedRecords(JsonReader reader) throws IOException {
+    private static int inspectWrappedRecords(JsonReader reader, FileChannel attachments) throws IOException {
         int count = 0;
         reader.beginArray();
         while (reader.hasNext()) {
             reader.beginObject();
+            boolean seenAttachment = false;
             while (reader.hasNext()) {
-                if ("row".equals(reader.nextName())) inspectRecord(reader, false);
-                else reader.skipValue(); // The scanner handles attachment strings, replacing them with ranges.
+                String field = reader.nextName();
+                if ("row".equals(field)) inspectRecord(reader, false);
+                else if (attachments != null && "dataBase64".equals(field)) {
+                    if (seenAttachment) throw new IOException("duplicate MMS attachment");
+                    seenAttachment = true;
+                    try {
+                        copyMmsData(attachments, reader.nextString(), DIGEST_SINK);
+                    } catch (IllegalArgumentException invalid) {
+                        throw new IOException("invalid MMS attachment");
+                    }
+                } else reader.skipValue();
             }
             reader.endObject();
             if (count < Integer.MAX_VALUE) count++;
@@ -344,7 +376,7 @@ public final class RestoreEngine {
             String name = reader.nextName();
             if (reader.peek() == JsonToken.NULL) { reader.nextNull(); continue; }
             // Provider IDs and thread IDs are local to a device and must never be restored.
-            if (isNonPortableColumn(name) || (sms && !isRestorableSmsColumn(name))) {
+            if (!isSafeColumnName(name) || isNonPortableColumn(name) || (sms && !isRestorableSmsColumn(name))) {
                 reader.skipValue();
             } else if (reader.peek() == JsonToken.BEGIN_OBJECT) {
                 readEncodedValue(reader, values, name);
@@ -361,6 +393,18 @@ public final class RestoreEngine {
         }
         reader.endObject();
         return values;
+    }
+
+    /** Provider values are bound, but some provider implementations append column names to SQL. */
+    public static boolean isSafeColumnName(String name) {
+        if (name.isEmpty()) return false;
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (i > 0 && c >= '0' && c <= '9')) continue;
+            return false;
+        }
+        return true;
     }
 
     private static void readEncodedValue(JsonReader reader, ContentValues values, String name) throws IOException {
@@ -475,12 +519,14 @@ public final class RestoreEngine {
         ContentValues message = new ContentValues();
         List<MmsPart> parts = new ArrayList<>();
         List<ContentValues> addresses = new ArrayList<>();
+        Set<String> threadRecipients = null;
         Long dateMs = null;
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
             if ("row".equals(name)) message.putAll(readRecord(reader, false));
             else if ("dateMs".equals(name)) dateMs = reader.nextLong();
+            else if ("threadRecipients".equals(name)) threadRecipients = readThreadRecipients(reader);
             else if ("parts".equals(name)) readMmsParts(reader, parts);
             else if ("addresses".equals(name)) readMmsAddresses(reader, addresses);
             else reader.skipValue();
@@ -506,7 +552,13 @@ public final class RestoreEngine {
         }
         Uri inserted = null;
         try {
-            attachMmsThread(context, message, addresses);
+            attachMmsThread(context, message, addresses, threadRecipients);
+            // Deleting a Send.req can also delete reports linked to its message ID. Keep that
+            // ID unset until every child write succeeds so rollback cannot remove other rows.
+            Integer kind = message.getAsInteger(Telephony.Mms.MESSAGE_TYPE);
+            String reportId = kind != null && kind == MMS_SEND_REQUEST
+                    ? message.getAsString(Telephony.Mms.MESSAGE_ID) : null;
+            if (reportId != null) message.remove(Telephony.Mms.MESSAGE_ID);
             inserted = resolver.insert(Telephony.Mms.CONTENT_URI, message);
             if (inserted == null) throw new SecurityException("provider rejected MMS");
             String id = inserted.getLastPathSegment();
@@ -525,6 +577,14 @@ public final class RestoreEngine {
                         copyMmsData(plaintext, part.dataRange, output);
                     }
                 }
+            }
+            if (reportId != null) {
+                ContentValues reportLink = new ContentValues(1);
+                reportLink.put(Telephony.Mms.MESSAGE_ID, reportId);
+                Uri completeMessage = inserted;
+                inserted = null; // Once linking is attempted, rollback is no longer safe.
+                if (resolver.update(completeMessage, reportLink, null, null) != 1)
+                    throw new IOException("could not link MMS reports");
             }
             result.mmsAdded++;
         } catch (Exception error) {
@@ -570,7 +630,32 @@ public final class RestoreEngine {
         return fingerprint != null && index.consume(MMS_INDEX, header + fingerprint);
     }
 
-    private static void attachMmsThread(Context context, ContentValues message, List<ContentValues> addresses) {
+    private static Set<String> readThreadRecipients(JsonReader reader) throws IOException {
+        Set<String> recipients = new HashSet<>();
+        int count = 0;
+        reader.beginArray();
+        while (reader.hasNext()) {
+            if (reader.peek() != JsonToken.STRING) throw new IOException("invalid MMS conversation address");
+            String address = reader.nextString();
+            if (++count > ArchiveFormat.MAX_THREAD_RECIPIENTS || address.isEmpty()
+                    || address.length() > ArchiveFormat.MAX_THREAD_RECIPIENT_LENGTH
+                    || "insert-address-token".equals(address)) {
+                throw new IOException("invalid MMS conversation address");
+            }
+            recipients.add(address);
+        }
+        reader.endArray();
+        return recipients;
+    }
+
+    private static void attachMmsThread(Context context, ContentValues message, List<ContentValues> addresses,
+            Set<String> savedRecipients) throws IOException {
+        if (savedRecipients != null && !savedRecipients.isEmpty()) {
+            long id = Telephony.Threads.getOrCreateThreadId(context, savedRecipients);
+            if (id <= 0) throw new IOException("MMS conversation unavailable");
+            message.put(Telephony.Mms.THREAD_ID, id);
+            return;
+        }
         Integer box = message.getAsInteger(Telephony.Mms.MESSAGE_BOX);
         boolean incoming = box != null && box == Telephony.Mms.MESSAGE_BOX_INBOX;
         Set<String> recipients = new HashSet<>();
@@ -588,9 +673,9 @@ public final class RestoreEngine {
                 recipients.add(address);
             }
         }
-        // Legacy archives do not identify the source phone's own number in a group.
-        // Preserve the addresses without guessing a sender-only thread for a known group.
-        if (incoming && (incomingTo.size() > 1 || copyRecipient)) return;
+        // Without a source thread, guessing can make an incoming group invisible or misfile it.
+        if (incoming && (incomingTo.size() > 1 || copyRecipient))
+            throw new IOException("incoming MMS group has no backup conversation");
         if (recipients.isEmpty()) return;
         try {
             message.put(Telephony.Mms.THREAD_ID, Telephony.Threads.getOrCreateThreadId(context, recipients));
@@ -628,7 +713,7 @@ public final class RestoreEngine {
         byte[] decodedBuffer = new byte[24 * 1024];
         java.util.Base64.Decoder decoder = java.util.Base64.getDecoder();
         try (InputStream encoded = AttachmentJsonInput.openBase64(plaintext, offset, length)) {
-            int remaining = MAX_MMS_PART_BYTES;
+            int remaining = ArchiveFormat.MAX_ATTACHMENT_BYTES;
             while (true) {
                 int lengthRead = 0;
                 while (lengthRead < encodedBuffer.length) {

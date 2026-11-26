@@ -1,5 +1,6 @@
 package com.ashkanrafiee.libresmsbackup.archive;
 
+import android.content.ContentUris;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
@@ -22,7 +23,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /** Reads and writes the streaming JSON payload inside a Libre SMS Backup archive. */
 public final class ArchiveFormat {
@@ -35,8 +38,13 @@ public final class ArchiveFormat {
     public static final int MAX_RECORD_METADATA_BYTES = 8 * 1024 * 1024;
     public static final int MAX_MMS_METADATA_BYTES = MAX_RECORD_METADATA_BYTES;
     public static final int MAX_MMS_CHILDREN = 4096;
-    private static final long MAX_MMS_PART_BYTES = 64L * 1024L * 1024L;
+    public static final int MAX_THREAD_RECIPIENTS = 256;
+    public static final int MAX_THREAD_RECIPIENT_LENGTH = 512;
+    public static final int MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
     private static final Uri MMS_URI = Uri.parse("content://mms");
+    private static final Uri SIMPLE_CONVERSATIONS_URI =
+            Uri.parse("content://mms-sms/conversations?simple=true");
+    private static final Uri CANONICAL_ADDRESS_URI = Uri.parse("content://mms-sms/canonical-address");
     private static final Uri RCS_CHAT_URI = Uri.parse("content://im/chat");
     private static final Uri RCS_FILE_URI = Uri.parse("content://im/ft");
     private ArchiveFormat() {}
@@ -57,8 +65,9 @@ public final class ArchiveFormat {
         int rcs = 0;
         try {
             try (OutputStream raw = new BufferedOutputStream(new FileOutputStream(temp));
-                 JsonWriter json = new JsonWriter(new OutputStreamWriter(
-                         ArchiveCrypto.openOutput(raw, context, password, encrypted), StandardCharsets.UTF_8))) {
+                 AttachmentJsonOutput payload = new AttachmentJsonOutput(new OutputStreamWriter(
+                         ArchiveCrypto.openOutput(raw, context, password, encrypted), StandardCharsets.UTF_8));
+                 JsonWriter json = new JsonWriter(payload)) {
                 json.beginObject();
                 json.name("schema").value(PAYLOAD_SCHEMA);
                 json.name("createdAtMs").value(System.currentTimeMillis());
@@ -91,9 +100,9 @@ public final class ArchiveFormat {
                 }
                 json.endArray();
                 json.name("mms");
-                mms = writeMmsSection(context, json, includeSms);
+                mms = writeMmsSection(context, json, payload, includeSms);
                 json.name("rcs");
-                rcs = writeRcsSection(context, json, includeSms);
+                rcs = writeRcsSection(context, json, payload, includeSms);
                 json.endObject();
                 // Closing JsonWriter also finalizes the encrypted payload.
             }
@@ -190,7 +199,7 @@ public final class ArchiveFormat {
         if (metadata != null) metadata.add(rowBytes);
         json.beginObject();
         for (String column : cursor.getColumnNames()) {
-            if (isNonPortableColumn(column)) continue;
+            if (isNonPortableColumn(column) || !RestoreEngine.isSafeColumnName(column)) continue;
             if (++fields > MAX_OBJECT_FIELDS) throw new IOException("backup object has too many fields");
             int fieldBytes = jsonStringBytes(column) + (fields == 1 ? 1 : 2); // Colon and comma.
             json.name(column);
@@ -276,7 +285,8 @@ public final class ArchiveFormat {
                 || "raw_contact_id".equals(column);
     }
 
-    private static int writeMmsSection(Context context, JsonWriter json, boolean enabled) throws IOException {
+    private static int writeMmsSection(Context context, JsonWriter json, AttachmentJsonOutput payload,
+            boolean enabled) throws IOException {
         json.beginObject();
         json.name("status");
         if (!enabled) {
@@ -309,11 +319,12 @@ public final class ArchiveFormat {
                     json.name("dateMs").value(dateMs);
                 }
                 json.name("parts").beginArray();
-                writeMmsParts(context, json, ref, metadata);
+                writeMmsParts(context, json, payload, ref, metadata);
                 json.endArray();
                 json.name("addresses").beginArray();
                 writeMmsAddresses(context, json, ref, metadata);
                 json.endArray();
+                writeMmsThreadRecipients(context, json, messages, metadata);
                 json.endObject();
                 count++;
             }
@@ -332,7 +343,67 @@ public final class ArchiveFormat {
         return count;
     }
 
-    private static void writeMmsParts(Context context, JsonWriter json, String ref, MmsMetadata metadata)
+    private static void writeMmsThreadRecipients(Context context, JsonWriter json, Cursor message,
+            MmsMetadata metadata) throws IOException {
+        List<String> recipients = readMmsThreadRecipients(context, message);
+        if (recipients == null) return;
+
+        int bytes = ",\"threadRecipients\":[]".length() + recipients.size() - 1;
+        for (String recipient : recipients) bytes += jsonStringBytes(recipient);
+        if (!metadata.tryAdd(bytes)) return;
+
+        json.name("threadRecipients").beginArray();
+        for (String recipient : recipients) json.value(recipient);
+        json.endArray();
+    }
+
+    private static List<String> readMmsThreadRecipients(Context context, Cursor message) {
+        try {
+            int threadIndex = message.getColumnIndex("thread_id");
+            if (threadIndex < 0 || message.isNull(threadIndex)) return null;
+            long threadId = message.getLong(threadIndex);
+            if (threadId <= 0) return null;
+
+            String ids = querySingleString(context, SIMPLE_CONVERSATIONS_URI, "recipient_ids",
+                    "_id=?", new String[] { Long.toString(threadId) });
+            // AOSP stores space-separated positive longs (up to 19 digits plus a separator).
+            if (ids == null || ids.length() > MAX_THREAD_RECIPIENTS * 20) return null;
+            String[] recipientIds = ids.trim().split(" +");
+            if (recipientIds.length > MAX_THREAD_RECIPIENTS) return null;
+
+            List<String> recipients = new ArrayList<>(recipientIds.length);
+            for (String recipientId : recipientIds) {
+                long id = Long.parseLong(recipientId);
+                if (id <= 0) return null;
+                String address = querySingleString(context,
+                        ContentUris.withAppendedId(CANONICAL_ADDRESS_URI, id), "address", null, null);
+                if (address == null || address.length() > MAX_THREAD_RECIPIENT_LENGTH
+                        || address.trim().isEmpty() || "insert-address-token".equals(address)) {
+                    return null;
+                }
+                recipients.add(address);
+            }
+            return recipients;
+        } catch (RuntimeException unavailable) {
+            // Thread recipients are optional; never emit a partially resolved list.
+            return null;
+        }
+    }
+
+    private static String querySingleString(Context context, Uri uri, String column,
+            String selection, String[] selectionArgs) {
+        try (Cursor cursor = context.getContentResolver().query(uri, new String[] { column },
+                selection, selectionArgs, null)) {
+            if (cursor == null || !cursor.moveToFirst()) return null;
+            int index = cursor.getColumnIndex(column);
+            if (index < 0 || cursor.isNull(index)) return null;
+            String value = cursor.getString(index);
+            return cursor.moveToNext() ? null : value;
+        }
+    }
+
+    private static void writeMmsParts(Context context, JsonWriter json, AttachmentJsonOutput payload,
+            String ref, MmsMetadata metadata)
             throws IOException {
         Uri uri = Uri.parse("content://mms/" + ref + "/part");
         try (Cursor cursor = context.getContentResolver().query(uri, null, null, null, "seq ASC")) {
@@ -344,12 +415,8 @@ public final class ArchiveFormat {
                 json.name("row"); writeCursorRow(json, cursor, metadata);
                 int id = cursor.getColumnIndex("_id");
                 if (id >= 0 && !cursor.isNull(id)) {
-                    String data = readProviderData(context, Uri.parse("content://mms/part/" + cursor.getLong(id)));
-                    if (data != null) {
-                        // The reader substitutes offset:length, at most two 19-digit lengths and a colon.
-                        metadata.add(",\"dataBase64\":\"\"".length() + 2 * 19 + 1);
-                        json.name("dataBase64").value(data);
-                    }
+                    writeProviderData(context, json, payload,
+                            Uri.parse("content://mms/part/" + cursor.getLong(id)), metadata);
                 }
                 json.endObject();
             }
@@ -385,8 +452,13 @@ public final class ArchiveFormat {
         }
 
         void add(int count) throws IOException {
+            if (!tryAdd(count)) throw new IOException("MMS metadata is too large");
+        }
+
+        boolean tryAdd(int count) {
+            if (count > MAX_MMS_METADATA_BYTES - bytes) return false;
             bytes += count;
-            if (bytes > MAX_MMS_METADATA_BYTES) throw new IOException("MMS metadata is too large");
+            return true;
         }
 
         void addChild(String ref) throws IOException {
@@ -396,24 +468,54 @@ public final class ArchiveFormat {
         }
     }
 
-    private static String readProviderData(Context context, Uri uri) {
-        try (InputStream input = context.getContentResolver().openInputStream(uri);
-             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
-            if (input == null) return null;
-            byte[] buffer = new byte[32 * 1024];
-            long total = 0;
-            int count;
-            while ((count = input.read(buffer)) != -1) {
-                total += count;
-                if (total > MAX_MMS_PART_BYTES) return null;
-                output.write(buffer, 0, count);
+    private static void writeProviderData(Context context, JsonWriter json, AttachmentJsonOutput payload,
+            Uri uri, MmsMetadata metadata) throws IOException {
+        InputStream source;
+        try {
+            source = context.getContentResolver().openInputStream(uri);
+        } catch (IOException | SecurityException | IllegalArgumentException unavailable) {
+            return;
+        }
+        if (source == null) return;
+        try (InputStream input = source) {
+            File stage = File.createTempFile("libresmsbackup-part-", ".tmp", context.getCacheDir());
+            try (FileInputStream staged = new FileInputStream(stage)) {
+                try (FileOutputStream output = new FileOutputStream(stage)) {
+                    if (!stage.delete()) throw new IOException("cannot unlink backup attachment stage");
+                    if (!stageProviderData(input, output)) return;
+                }
+                // The reader substitutes offset:length (at most two 19-digit numbers and a colon).
+                if (metadata != null) metadata.add(",\"dataBase64\":\"\"".length() + 2 * 19 + 1);
+                payload.writeAttachment(json, staged);
+            } finally {
+                stage.delete();
             }
-            Arrays.fill(buffer, (byte) 0);
-            return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
-        } catch (Exception ignored) { return null; }
+        }
     }
 
-    private static int writeRcsSection(Context context, JsonWriter json, boolean enabled) throws IOException {
+    private static boolean stageProviderData(InputStream input, OutputStream output) throws IOException {
+        byte[] buffer = new byte[32 * 1024];
+        int remaining = MAX_ATTACHMENT_BYTES;
+        try {
+            while (true) {
+                int count;
+                try {
+                    count = input.read(buffer, 0, Math.min(buffer.length, remaining + 1));
+                } catch (IOException unavailable) {
+                    return false;
+                }
+                if (count == -1) return true;
+                if (count == 0 || count > remaining) return false;
+                output.write(buffer, 0, count);
+                remaining -= count;
+            }
+        } finally {
+            Arrays.fill(buffer, (byte) 0);
+        }
+    }
+
+    private static int writeRcsSection(Context context, JsonWriter json, AttachmentJsonOutput payload,
+            boolean enabled) throws IOException {
         json.beginObject();
         if (!enabled) {
             json.name("status").value("not_selected");
@@ -443,8 +545,8 @@ public final class ArchiveFormat {
                     json.name("row"); writeCursorRow(json, files, null);
                     int id = files.getColumnIndex("_id");
                     if (id >= 0 && !files.isNull(id)) {
-                        String data = readProviderData(context, Uri.parse("content://im/ft/" + files.getLong(id)));
-                        if (data != null) json.name("dataBase64").value(data);
+                            writeProviderData(context, json, payload,
+                                    Uri.parse("content://im/ft/" + files.getLong(id)), null);
                     }
                     json.endObject();
                 }

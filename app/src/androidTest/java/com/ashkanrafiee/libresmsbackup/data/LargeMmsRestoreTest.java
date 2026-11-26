@@ -110,7 +110,8 @@ public class LargeMmsRestoreTest extends TestCase {
         try (TestMmsProvider provider = new TestMmsProvider(context)) {
             try (OutputStream output = new FileOutputStream(archive)) {
                 writeJson(output, MMS_START + "{\"dataBase64\":\"YQ==\"},"
-                        + "{\"dataBase64\":\"Yg==\"}" + MMS_END);
+                        + "{\"dataBase64\":\"Yg==\"}" + MMS_END.replace("\"msg_box\":1",
+                                "\"msg_box\":2,\"m_type\":128,\"m_id\":\"linked-report\""));
             }
             provider.rejectSecondPart = true;
             Context restoreContext = provider.wrap(context);
@@ -119,6 +120,7 @@ public class LargeMmsRestoreTest extends TestCase {
             assertEquals(1, failed.failed);
             assertEquals(2, provider.partOpenCount);
             assertEquals(1, provider.deleteCount);
+            assertNull(provider.deletedReportId);
             assertNull(provider.message);
             assertTrue(provider.addresses.isEmpty());
             assertTrue(provider.parts.isEmpty());
@@ -130,6 +132,7 @@ public class LargeMmsRestoreTest extends TestCase {
             assertEquals(0, retry.failed);
             assertEquals(0, retry.duplicates);
             assertEquals(4, provider.partOpenCount);
+            assertEquals("linked-report", provider.message.getAsString(Telephony.Mms.MESSAGE_ID));
         } finally {
             archive.delete();
         }
@@ -203,21 +206,34 @@ public class LargeMmsRestoreTest extends TestCase {
         }
     }
 
-    public void testLegacyIncomingGroupDoesNotGetSenderOnlyThread() throws Exception {
+    public void testIncomingGroupUsesSavedConversationOrIsReportedUnrestored() throws Exception {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         File archive = File.createTempFile("group-mms-", ".json", context.getCacheDir());
         try (TestMmsProvider provider = new TestMmsProvider(context)) {
-            try (OutputStream output = new FileOutputStream(archive)) {
-                writeJson(output, "{\"schema\":2,\"mms\":{\"messages\":[{\"row\":{\"date\":1700000000,"
+            String group = "{\"schema\":2,\"mms\":{\"messages\":[{\"row\":{\"date\":1700000000,"
                         + "\"msg_box\":1},\"addresses\":[{\"row\":{\"address\":\"+15550100\",\"type\":137}},"
                         + "{\"row\":{\"address\":\"+15550101\",\"type\":151}},"
-                        + "{\"row\":{\"address\":\"+15550102\",\"type\":151}}]}]}}");
+                        + "{\"row\":{\"address\":\"+15550102\",\"type\":151}}]";
+            try (OutputStream output = new FileOutputStream(archive)) {
+                writeJson(output, group + "} ]}}");
             }
-            RestoreEngine.RestoreSummary result = RestoreEngine.restore(provider.wrap(context), archive, true, false);
+            Context restoreContext = provider.wrap(context);
+            RestoreEngine.RestoreSummary legacy = RestoreEngine.restore(restoreContext, archive, true, false);
+            assertEquals(0, legacy.mmsAdded);
+            assertEquals(1, legacy.failed);
+            assertTrue(provider.messages.isEmpty());
+            try (OutputStream output = new FileOutputStream(archive)) {
+                writeJson(output, group + ",\"threadRecipients\":[\"+15550100\",\"+15550102\"]}]}}");
+            }
+            RestoreEngine.RestoreSummary result = RestoreEngine.restore(restoreContext, archive, true, false);
             assertEquals(1, result.mmsAdded);
+            assertEquals(0, result.failed);
             assertEquals(3, provider.addresses.size());
-            assertFalse(provider.message.containsKey(Telephony.Mms.THREAD_ID));
+            assertEquals(Long.valueOf(7), provider.message.getAsLong(Telephony.Mms.THREAD_ID));
+            assertEquals(2, provider.threadRecipients.size());
+            assertTrue(provider.threadRecipients.contains("+15550100"));
+            assertTrue(provider.threadRecipients.contains("+15550102"));
         } finally {
             archive.delete();
         }
@@ -306,6 +322,8 @@ public class LargeMmsRestoreTest extends TestCase {
         boolean rejectSecondPart;
         int partOpenCount;
         int deleteCount;
+        String deletedReportId;
+        List<String> threadRecipients;
 
         TestMmsProvider(Context context) throws IOException {
             outputDir = Files.createTempDirectory(context.getCacheDir().toPath(), "restored-mms-").toFile();
@@ -333,7 +351,7 @@ public class LargeMmsRestoreTest extends TestCase {
             MatrixCursor cursor = new MatrixCursor(projection);
             if ("mms-sms".equals(uri.getAuthority())) {
                 assertEquals("/threadID", uri.getPath());
-                assertEquals("+15550100", uri.getQueryParameter("recipient"));
+                threadRecipients = uri.getQueryParameters("recipient");
                 cursor.addRow(new Object[]{7L});
                 return cursor;
             }
@@ -402,6 +420,7 @@ public class LargeMmsRestoreTest extends TestCase {
         @Override public int delete(Uri uri, String selection, String[] args) {
             assertEquals(MESSAGE_URI, uri);
             assertNotNull(message);
+            deletedReportId = message.getAsString(Telephony.Mms.MESSAGE_ID);
             deleteCount++;
             removePartFiles();
             parts.clear();
@@ -422,7 +441,9 @@ public class LargeMmsRestoreTest extends TestCase {
 
         @Override public String getType(Uri uri) { throw new UnsupportedOperationException(); }
         @Override public int update(Uri uri, ContentValues values, String selection, String[] args) {
-            throw new UnsupportedOperationException();
+            assertEquals(MESSAGE_URI, uri);
+            message.putAll(values);
+            return 1;
         }
     }
 }

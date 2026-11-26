@@ -119,11 +119,15 @@ public class RestoreEngineTest extends TestCase {
         String[] malformedSections = {
                 "\"sms\":[{\"body\":[]}]",
                 "\"calls\":[{\"duration\":true}]",
+                "\"sms\":[{\"body\":\"earlier\"}],\"sms\":[]",
+                "\"rcs\":{\"chats\":[{\"row\":{}}],\"chats\":[]}",
+                "\"mms\":{\"messages\":[{}],\"messages\":[]}",
                 "\"calls\":[{\"vendor_blob\":{\"encoding\":\"base64\",\"data\":[1]}}]",
                 "\"mms\":{\"messages\":[null]}",
                 "\"mms\":{\"messages\":[{\"dateMs\":null}]}",
                 "\"mms\":{\"messages\":[{\"parts\":[{\"row\":[] }]}]}",
                 "\"mms\":{\"messages\":[{\"parts\":[{\"dataBase64\":null}]}]}",
+                "\"mms\":{\"messages\":[{\"parts\":[{\"dataBase64\":\"a===\"}]}]}",
                 "\"mms\":{\"messages\":[{\"addresses\":[0]}]}",
                 "\"rcs\":{\"chats\":[{\"row\":null}]}",
                 "\"rcs\":{\"files\":[false]}"
@@ -142,6 +146,15 @@ public class RestoreEngineTest extends TestCase {
         } finally {
             archive.delete();
         }
+    }
+
+    public void testOnlySafeProviderColumnNamesAreAccepted() {
+        assertTrue(RestoreEngine.isSafeColumnName("vendor_123"));
+        assertTrue(RestoreEngine.isSafeColumnName("_id"));
+        assertFalse(RestoreEngine.isSafeColumnName("7foo"));
+        assertFalse(RestoreEngine.isSafeColumnName("two columns"));
+        assertFalse(RestoreEngine.isSafeColumnName("column)"));
+        assertFalse(RestoreEngine.isSafeColumnName(""));
     }
 
     public void testInspectAcceptsLegacyMetadataAndShuffledFields() throws Exception {

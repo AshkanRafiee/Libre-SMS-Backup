@@ -13,10 +13,13 @@ import android.os.ParcelFileDescriptor;
 
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 
@@ -111,13 +114,50 @@ public class ArchiveWriteLimitsTest extends TestCase {
         provider.parts = row(new String[]{"_id", "ct"}, 1L, "image/png");
         provider.attachment = File.createTempFile("archive-attachment-", ".bin", context.getCacheDir());
         try (RandomAccessFile file = new RandomAccessFile(provider.attachment, "rw")) {
-            file.setLength(7 * 1024 * 1024);
+            file.setLength(64L * 1024 * 1024);
         }
         assertEquals(1, create().mmsCount);
-        assertTrue(provider.archive.length() > 8 * 1024 * 1024);
+        assertTrue(provider.archive.length() > 85L * 1024 * 1024);
         try (ArchiveFormat.PreparedRestore prepared =
                      ArchiveFormat.prepareRestore(context, DESTINATION, new char[0])) {
             assertEquals(1, prepared.summary.mmsCount);
+        }
+    }
+
+    public void testMmsExportsResolvedConversationAddressesWithoutLocalIds() throws Exception {
+        if (context == null) return;
+        provider.mms = true;
+        provider.conversation = true;
+        provider.parts = new MatrixCursor(new String[]{"ct"});
+        assertEquals(1, create().mmsCount);
+        String archive = new String(Files.readAllBytes(provider.archive.toPath()), StandardCharsets.UTF_8);
+        assertTrue(archive.contains("\"threadRecipients\":[\"2025550101\",\"2025550102\"]"));
+        assertFalse(archive.contains("\"thread_id\""));
+        try (ArchiveFormat.PreparedRestore prepared =
+                     ArchiveFormat.prepareRestore(context, DESTINATION, new char[0])) {
+            assertEquals(1, prepared.summary.mmsCount);
+        }
+    }
+
+    public void testEncryptedAttachmentPaddingAndMissingValues() throws Exception {
+        if (context == null) return;
+        provider.mms = true;
+        provider.attachment = File.createTempFile("archive-attachment-", ".bin", context.getCacheDir());
+        for (byte[] bytes : new byte[][]{{'a', 'b'}, {}}) {
+            Files.write(provider.attachment.toPath(), bytes);
+            MatrixCursor parts = new MatrixCursor(new String[]{"_id", "ct"});
+            parts.addRow(new Object[]{1L, "application/octet-stream"});
+            parts.addRow(new Object[]{2L, "application/octet-stream"});
+            provider.parts = parts;
+            ArchiveFormat.create(context, DESTINATION, "fixture-pass".toCharArray(), true, true, false);
+            ByteArrayOutputStream plaintext = new ByteArrayOutputStream();
+            try (FileInputStream input = new FileInputStream(provider.archive)) {
+                assertTrue(ArchiveCrypto.stagePayload(input, plaintext, "fixture-pass".toCharArray()));
+            }
+            String json = new String(plaintext.toByteArray(), StandardCharsets.UTF_8);
+            String value = bytes.length == 0 ? "" : "YWI=";
+            assertTrue(json.contains("\"dataBase64\":\"" + value + "\""));
+            assertEquals(json.indexOf("\"dataBase64\""), json.lastIndexOf("\"dataBase64\""));
         }
     }
 
@@ -176,6 +216,7 @@ public class ArchiveWriteLimitsTest extends TestCase {
         Cursor parts;
         Cursor addresses;
         boolean mms;
+        boolean conversation;
 
         @Override public boolean onCreate() { return true; }
 
@@ -183,7 +224,16 @@ public class ArchiveWriteLimitsTest extends TestCase {
                 String order) {
             switch (uri.toString()) {
                 case "content://sms": return sms == null ? new MatrixCursor(new String[]{"body"}) : sms;
-                case "content://mms": return mms ? row(new String[]{"_id"}, 1L) : null;
+                case "content://mms":
+                    if (!mms) return null;
+                    return conversation ? row(new String[]{"_id", "thread_id"}, 1L, 99L)
+                            : row(new String[]{"_id"}, 1L);
+                case "content://mms-sms/conversations?simple=true":
+                    return row(new String[]{"recipient_ids"}, "100 101");
+                case "content://mms-sms/canonical-address/100":
+                    return row(new String[]{"address"}, "2025550101");
+                case "content://mms-sms/canonical-address/101":
+                    return row(new String[]{"address"}, "2025550102");
                 case "content://mms/1/part": return parts;
                 case "content://mms/1/addr":
                     return addresses == null ? new MatrixCursor(new String[]{"address"}) : addresses;
