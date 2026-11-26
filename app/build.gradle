@@ -10,8 +10,8 @@ android {
         minSdk 26
         targetSdk 36
         // versionCode = major * 10000 + minor * 1000 + patch
-        versionCode 10003
-        versionName '1.0.3'
+        versionCode 10004
+        versionName '1.0.4'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
