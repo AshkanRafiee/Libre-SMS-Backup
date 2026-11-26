@@ -13,6 +13,7 @@ import android.util.JsonToken;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +24,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /** Restores an already authenticated archive without parsing the complete payload into memory. */
@@ -38,10 +40,13 @@ public final class RestoreEngine {
     private RestoreEngine() {}
 
     public static ArchiveSummary inspect(File plaintext) throws IOException {
+        return inspect(new FileInputStream(plaintext));
+    }
+
+    public static ArchiveSummary inspect(InputStream plaintext) throws IOException {
         ArchiveSummary result = new ArchiveSummary();
         int schema = -1;
-        try (JsonReader reader = new JsonReader(new InputStreamReader(
-                new FileInputStream(plaintext), StandardCharsets.UTF_8))) {
+        try (JsonReader reader = new JsonReader(new InputStreamReader(plaintext, StandardCharsets.UTF_8))) {
             reader.beginObject();
             while (reader.hasNext()) {
                 String name = reader.nextName();
@@ -82,8 +87,25 @@ public final class RestoreEngine {
     public static RestoreSummary restore(Context context, File plaintext,
             boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
             ArchiveSummary preview, ProgressListener listener) throws Exception {
-        ContentResolver resolver = context.getContentResolver();
         if (preview == null) preview = inspect(plaintext);
+        return restore(context, new FileInputStream(plaintext), includeSms, includeCalls, includeMms, includeRcs,
+                preview, listener);
+    }
+
+    /** Takes ownership of the payload stream and uses the summary from its earlier inspection. */
+    public static RestoreSummary restore(Context context, InputStream plaintext,
+            boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
+            ArchiveSummary preview, ProgressListener listener) throws Exception {
+        try (JsonReader reader = new JsonReader(new InputStreamReader(plaintext, StandardCharsets.UTF_8))) {
+            return restore(context, reader, includeSms, includeCalls, includeMms, includeRcs,
+                    Objects.requireNonNull(preview), listener);
+        }
+    }
+
+    private static RestoreSummary restore(Context context, JsonReader reader,
+            boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
+            ArchiveSummary preview, ProgressListener listener) throws Exception {
+        ContentResolver resolver = context.getContentResolver();
         boolean hasRcs = includeRcs && preview.rcsCount > 0;
         Set<String> existingSms = (includeSms || includeRcs)
                 ? existingKeys(resolver, Telephony.Sms.CONTENT_URI, SMS_KEY_COLUMNS,
@@ -107,33 +129,30 @@ public final class RestoreEngine {
             }
         }
         RestoreSummary result = new RestoreSummary();
-        try (JsonReader reader = new JsonReader(new InputStreamReader(
-                new FileInputStream(plaintext), StandardCharsets.UTF_8))) {
-            reader.beginObject();
-            while (reader.hasNext()) {
-                String name = reader.nextName();
-                if ("sms".equals(name)) {
-                    if (includeSms) restoreArray(reader, resolver, Telephony.Sms.CONTENT_URI, true, existingSms, result,
-                            threadIds, listener, completed, total);
-                    else reader.skipValue();
-                } else if ("calls".equals(name)) {
-                    if (includeCalls) restoreArray(reader, resolver, CallLog.Calls.CONTENT_URI, false, existingCalls, result,
-                            null, listener, completed, total);
-                    else reader.skipValue();
-                } else if ("mms".equals(name)) {
-                    if (includeMms) restoreMmsSection(reader, resolver, existingMms, result, mmsProviderAvailable,
-                            listener, completed, total);
-                    else reader.skipValue();
-                } else if ("rcs".equals(name)) {
-                    if (includeRcs) restoreRcsSection(reader, resolver, existingSms, result,
-                            threadIds, listener, completed, total);
-                    else reader.skipValue();
-                } else {
-                    reader.skipValue();
-                }
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String name = reader.nextName();
+            if ("sms".equals(name)) {
+                if (includeSms) restoreArray(reader, resolver, Telephony.Sms.CONTENT_URI, true, existingSms, result,
+                        threadIds, listener, completed, total);
+                else reader.skipValue();
+            } else if ("calls".equals(name)) {
+                if (includeCalls) restoreArray(reader, resolver, CallLog.Calls.CONTENT_URI, false, existingCalls, result,
+                        null, listener, completed, total);
+                else reader.skipValue();
+            } else if ("mms".equals(name)) {
+                if (includeMms) restoreMmsSection(reader, resolver, existingMms, result, mmsProviderAvailable,
+                        listener, completed, total);
+                else reader.skipValue();
+            } else if ("rcs".equals(name)) {
+                if (includeRcs) restoreRcsSection(reader, resolver, existingSms, result,
+                        threadIds, listener, completed, total);
+                else reader.skipValue();
+            } else {
+                reader.skipValue();
             }
-            reader.endObject();
         }
+        reader.endObject();
         return result;
     }
 

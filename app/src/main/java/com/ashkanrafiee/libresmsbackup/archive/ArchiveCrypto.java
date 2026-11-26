@@ -114,19 +114,16 @@ public final class ArchiveCrypto {
         }
     }
 
-    /** Opens the payload. Encrypted content is authenticated only after reading it to EOF. */
-    public static InputStream openDecrypted(InputStream source, char[] password) throws IOException {
-        return openPayload(source, password).stream;
-    }
-
-    static OpenedPayload openPayload(InputStream source, char[] password) throws IOException {
-        if (source == null || password == null) throw new IllegalArgumentException();
+    // Only write to a private stage. No caller may read it before this returns successfully.
+    static boolean stagePayload(InputStream source, OutputStream stage, char[] password) throws IOException {
         DataInputStream input = new DataInputStream(source);
         byte[] header = readHeader(input);
         try {
             JSONObject json = parseHeader(header);
-            if (!isEncrypted(json))
-                return new OpenedPayload(PayloadLimit.read(input, PayloadLimit.bytes(false), false), false);
+            if (!isEncrypted(json)) {
+                copyPayload(input, stage, null, PayloadLimit.bytes(false), false);
+                return false;
+            }
             JSONObject kdf = json.getJSONObject("kdf");
             JSONObject cipherJson = json.getJSONObject("cipher");
             if (!"PBKDF2WithHmacSHA256".equals(kdf.getString("algorithm"))
@@ -144,12 +141,25 @@ public final class ArchiveCrypto {
                 throw new IOException("invalid archive encryption parameters");
             byte[] keyBytes = deriveKey(password, salt, iterations, KEY_BITS);
             try {
-                Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-                cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keyBytes, "AES"),
-                        new GCMParameterSpec(TAG_BITS, iv));
+                SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
+                GCMParameterSpec gcm = new GCMParameterSpec(TAG_BITS, iv);
+                Cipher cipher;
+                boolean streaming;
+                try {
+                    // The platform BC implementation emits blocks during update. Some older
+                    // Android versions block explicit use of this transformation from BC.
+                    cipher = Cipher.getInstance("AES/GCM/NoPadding", "BC");
+                    cipher.init(Cipher.DECRYPT_MODE, key, gcm);
+                    streaming = true;
+                } catch (GeneralSecurityException unavailable) {
+                    cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                    cipher.init(Cipher.DECRYPT_MODE, key, gcm);
+                    streaming = false;
+                }
                 cipher.updateAAD(header);
-                InputStream bounded = PayloadLimit.read(input, PayloadLimit.bytes(true) + TAG_BITS / 8, true);
-                return new OpenedPayload(decryptingStream(bounded, cipher), true);
+                long limit = streaming ? PayloadLimit.MAX_ENCRYPTED_BYTES : PayloadLimit.bytes(true);
+                copyPayload(input, stage, cipher, limit + TAG_BITS / 8, streaming);
+                return true;
             } finally {
                 Arrays.fill(salt, (byte) 0);
                 Arrays.fill(iv, (byte) 0);
@@ -191,59 +201,42 @@ public final class ArchiveCrypto {
         };
     }
 
-    // Android's CipherInputStream can allocate a larger output array on each
-    // input chunk while GCM is still buffering. Use update's actual output instead.
-    private static InputStream decryptingStream(InputStream source, Cipher cipher) {
-        return new InputStream() {
-            private final byte[] input = new byte[32 * 1024];
-            private byte[] output;
-            private int position;
-            private boolean finished;
-
-            @Override public int read() throws IOException {
-                return fill() ? output[position++] & 0xff : -1;
-            }
-
-            @Override public int read(byte[] bytes, int offset, int length) throws IOException {
-                if (length == 0) return 0;
-                if (!fill()) return -1;
-                int count = Math.min(length, output.length - position);
-                System.arraycopy(output, position, bytes, offset, count);
-                position += count;
-                return count;
-            }
-
-            private boolean fill() throws IOException {
-                while (output == null || position == output.length) {
-                    clearOutput();
-                    if (finished) return false;
-                    int count = source.read(input);
-                    if (count == -1) {
-                        finished = true;
-                        try {
-                            output = cipher.doFinal();
-                        } catch (GeneralSecurityException error) {
-                            throw new IOException("could not authenticate archive", error);
-                        }
-                    } else if (count > 0) {
-                        output = cipher.update(input, 0, count);
-                    }
+    private static void copyPayload(InputStream source, OutputStream stage, Cipher cipher,
+            long limit, boolean streaming) throws IOException, GeneralSecurityException {
+        InputStream bounded = PayloadLimit.read(source, limit, cipher != null, cipher != null && !streaming);
+        byte[] input = new byte[32 * 1024];
+        int pending = 0;
+        try {
+            int count;
+            while ((count = bounded.read(input)) != -1) {
+                if (cipher == null) {
+                    stage.write(input, 0, count);
+                    continue;
                 }
-                return true;
+                byte[] output = cipher.update(input, 0, count);
+                int emitted = writeAndClear(stage, output);
+                // Streaming GCM may hold the tag and at most one partial AES block.
+                // Fail early if a device's provider buffers instead of streaming.
+                if (streaming) {
+                    pending += count - emitted;
+                    if (pending < 0 || pending >= TAG_BITS / 8 + 16)
+                        throw new IOException("archive cipher did not stream");
+                }
             }
+            if (cipher != null) writeAndClear(stage, cipher.doFinal());
+        } finally {
+            Arrays.fill(input, (byte) 0);
+        }
+    }
 
-            private void clearOutput() {
-                if (output != null) Arrays.fill(output, (byte) 0);
-                output = null;
-                position = 0;
-            }
-
-            @Override public void close() throws IOException {
-                finished = true;
-                clearOutput();
-                source.close();
-            }
-        };
+    private static int writeAndClear(OutputStream stage, byte[] output) throws IOException {
+        if (output == null) return 0;
+        try {
+            stage.write(output);
+            return output.length;
+        } finally {
+            Arrays.fill(output, (byte) 0);
+        }
     }
 
     /** Reads only the bounded container header so the UI can avoid asking for a password on plaintext archives. */
@@ -285,22 +278,18 @@ public final class ArchiveCrypto {
         throw new IOException("unsupported archive encryption");
     }
 
-    static final class OpenedPayload {
-        final InputStream stream;
-        final boolean encrypted;
-
-        OpenedPayload(InputStream stream, boolean encrypted) {
-            this.stream = stream;
-            this.encrypted = encrypted;
-        }
-    }
-
     public static final class PayloadTooLargeException extends IOException {
         public final boolean encrypted;
+        public final boolean heapLimited;
 
         PayloadTooLargeException(boolean encrypted) {
+            this(encrypted, false);
+        }
+
+        PayloadTooLargeException(boolean encrypted, boolean heapLimited) {
             super("archive payload exceeds the size limit");
             this.encrypted = encrypted;
+            this.heapLimited = heapLimited;
         }
     }
 
@@ -336,12 +325,8 @@ public final class ArchiveCrypto {
     }
 
     static byte[] decryptForTest(byte[] archive, char[] password) throws IOException {
-        InputStream encrypted = openDecrypted(new ByteArrayInputStream(archive), password);
         ByteArrayOutputStream plaintext = new ByteArrayOutputStream();
-        byte[] buffer = new byte[4096];
-        int count;
-        while ((count = encrypted.read(buffer)) != -1) plaintext.write(buffer, 0, count);
-        encrypted.close();
+        stagePayload(new ByteArrayInputStream(archive), plaintext, password);
         return plaintext.toByteArray();
     }
 

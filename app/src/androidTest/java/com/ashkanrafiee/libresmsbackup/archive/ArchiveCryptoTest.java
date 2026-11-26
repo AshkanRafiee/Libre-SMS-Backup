@@ -38,11 +38,9 @@ public class ArchiveCryptoTest extends TestCase {
         OutputStream payload = ArchiveCrypto.openOutput(output, null, null, false);
         payload.write("readable test archive".getBytes(StandardCharsets.UTF_8));
         payload.close();
-        InputStream input = ArchiveCrypto.openDecrypted(new ByteArrayInputStream(output.toByteArray()), new char[0]);
         ByteArrayOutputStream restoredOutput = new ByteArrayOutputStream();
-        byte[] buffer = new byte[64];
-        int count; while ((count = input.read(buffer)) != -1) restoredOutput.write(buffer, 0, count);
-        input.close();
+        assertFalse(ArchiveCrypto.stagePayload(new ByteArrayInputStream(output.toByteArray()),
+                restoredOutput, new char[0]));
         assertEquals("readable test archive", new String(restoredOutput.toByteArray(), StandardCharsets.UTF_8));
     }
 
@@ -71,12 +69,40 @@ public class ArchiveCryptoTest extends TestCase {
             }
         };
         ByteArrayOutputStream recovered = new ByteArrayOutputStream();
-        try (InputStream input = ArchiveCrypto.openDecrypted(source, password)) {
-            byte[] buffer = new byte[777];
-            int count;
-            while ((count = input.read(buffer)) != -1) recovered.write(buffer, 0, count);
-        }
+        assertTrue(ArchiveCrypto.stagePayload(source, recovered, password));
         assertTrue(Arrays.equals(original, recovered.toByteArray()));
+    }
+
+    public void testTruncatedAndExtendedLegacyPayloadsFailAuthentication() throws Exception {
+        char[] password = "legacy password".toCharArray();
+        byte[] archive = ArchiveCrypto.encryptForTest(new byte[32 * 1024 + 7], password);
+        for (int length : new int[]{archive.length - 1, archive.length + 1}) {
+            try {
+                ArchiveCrypto.decryptForTest(Arrays.copyOf(archive, length), password);
+                fail("adding or removing bytes must invalidate the GCM tag");
+            } catch (IOException expected) {
+                assertTrue(ArchiveCrypto.isAuthenticationFailure(expected));
+            }
+        }
+    }
+
+    public void testChangingValidHeaderMetadataFailsAuthentication() throws Exception {
+        char[] password = "header test password".toCharArray();
+        ByteArrayOutputStream destination = new ByteArrayOutputStream();
+        try (OutputStream output = ArchiveCrypto.openEncrypted(destination, null, password)) {
+            output.write(42);
+        }
+        byte[] archive = destination.toByteArray();
+        String field = "\"appVersion\":\"";
+        int fieldOffset = new String(archive, StandardCharsets.ISO_8859_1).indexOf(field);
+        assertTrue(fieldOffset >= 0);
+        archive[fieldOffset + field.length()] = 'x'; // "unknown" becomes "xnknown"; still valid JSON.
+        try {
+            ArchiveCrypto.decryptForTest(archive, password);
+            fail("header metadata is authenticated");
+        } catch (IOException expected) {
+            assertTrue(ArchiveCrypto.isAuthenticationFailure(expected));
+        }
     }
 
     public void testEncryptedFinalWriteFailureIsNotSwallowed() throws Exception {
@@ -100,17 +126,18 @@ public class ArchiveCryptoTest extends TestCase {
     public void testSizeLimitAtEofAndOneByteOver() throws Exception {
         for (boolean encrypted : new boolean[]{false, true}) {
             byte[] payload = {1, 2, 3};
-            try (InputStream input = PayloadLimit.read(new ByteArrayInputStream(payload), 3, encrypted)) {
+            try (InputStream input = PayloadLimit.read(new ByteArrayInputStream(payload), 3, encrypted, false)) {
                 assertEquals(3, input.read(new byte[8]));
                 assertEquals(-1, input.read());
             }
-            try (InputStream input = PayloadLimit.read(new ByteArrayInputStream(payload), 2, encrypted)) {
+            try (InputStream input = PayloadLimit.read(new ByteArrayInputStream(payload), 2, encrypted, encrypted)) {
                 assertEquals(2, input.read(new byte[2]));
                 try {
                     input.read(new byte[8]);
                     fail("data beyond the limit must not reach the caller");
                 } catch (ArchiveCrypto.PayloadTooLargeException expected) {
                     assertEquals(encrypted, expected.encrypted);
+                    assertEquals(encrypted, expected.heapLimited);
                 }
             }
             ByteArrayOutputStream destination = new ByteArrayOutputStream();

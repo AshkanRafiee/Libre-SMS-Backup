@@ -8,7 +8,7 @@ import java.io.OutputStream;
 /** Bounds payload bytes, not the container header. */
 final class PayloadLimit {
     private static final long MAX_PLAINTEXT_BYTES = 2L * 1024 * 1024 * 1024;
-    private static final long MAX_ENCRYPTED_BYTES = 512L * 1024 * 1024;
+    static final long MAX_ENCRYPTED_BYTES = 512L * 1024 * 1024;
 
     private PayloadLimit() {}
 
@@ -19,7 +19,7 @@ final class PayloadLimit {
         return Math.min(MAX_ENCRYPTED_BYTES, Runtime.getRuntime().maxMemory() / 4);
     }
 
-    static InputStream read(InputStream source, long limit, boolean encrypted) {
+    static InputStream read(InputStream source, long limit, boolean encrypted, boolean heapLimited) {
         return new InputStream() {
             private long remaining = limit;
 
@@ -37,7 +37,7 @@ final class PayloadLimit {
             }
 
             private void consume(int count) throws IOException {
-                if (count > remaining) throw new ArchiveCrypto.PayloadTooLargeException(encrypted);
+                if (count > remaining) throw new ArchiveCrypto.PayloadTooLargeException(encrypted, heapLimited);
                 remaining -= count;
             }
 

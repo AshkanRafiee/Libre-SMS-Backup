@@ -147,9 +147,10 @@ final class RestoreSession {
         int message;
         String code;
         if (failure instanceof ArchiveCrypto.PayloadTooLargeException) {
-            boolean encrypted = ((ArchiveCrypto.PayloadTooLargeException) failure).encrypted;
-            message = encrypted ? R.string.restore_error_encrypted_too_large : R.string.restore_error_archive_too_large;
-            code = encrypted ? ReportDiagnostics.RESTORE_ENCRYPTED_ARCHIVE_TOO_LARGE
+            ArchiveCrypto.PayloadTooLargeException sizeFailure = (ArchiveCrypto.PayloadTooLargeException) failure;
+            message = sizeFailure.heapLimited ? R.string.restore_error_encrypted_too_large
+                    : R.string.restore_error_archive_too_large;
+            code = sizeFailure.encrypted ? ReportDiagnostics.RESTORE_ENCRYPTED_ARCHIVE_TOO_LARGE
                     : ReportDiagnostics.RESTORE_ARCHIVE_TOO_LARGE;
         } else if (ArchiveCrypto.isAuthenticationFailure(failure)) {
             message = R.string.error_wrong_password;

@@ -17,6 +17,7 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -104,36 +105,34 @@ public final class ArchiveFormat {
     public static synchronized PreparedRestore prepareRestore(Context context, Uri source, char[] password)
             throws Exception {
         if (source == null || password == null) throw new IllegalArgumentException();
-        File plaintext = null;
+        File stage = null;
+        FileInputStream plaintext = null;
         boolean ownershipTransferred = false;
         try {
-            plaintext = File.createTempFile("libresmsbackup-restore-", ".json", context.getCacheDir());
+            stage = File.createTempFile("libresmsbackup-restore-", ".json", context.getCacheDir());
+            plaintext = new FileInputStream(stage);
             boolean encrypted;
-            try (InputStream raw = context.getContentResolver().openInputStream(source)) {
-                if (raw == null) throw new IOException("cannot open source");
-                ArchiveCrypto.OpenedPayload payload = ArchiveCrypto.openPayload(new BufferedInputStream(raw), password);
-                encrypted = payload.encrypted;
-                try (InputStream decrypted = payload.stream;
-                     FileOutputStream output = new FileOutputStream(plaintext)) {
-                    byte[] buffer = new byte[32 * 1024];
-                    try {
-                        int count;
-                        while ((count = decrypted.read(buffer)) != -1) output.write(buffer, 0, count);
-                    } finally {
-                        Arrays.fill(buffer, (byte) 0);
-                    }
+            try (FileOutputStream output = new FileOutputStream(stage)) {
+                // Keep only the open descriptors. The OS frees the staged data even if the app dies.
+                if (!stage.delete()) throw new IOException("cannot unlink restore stage");
+                stage = null;
+                try (InputStream raw = context.getContentResolver().openInputStream(source)) {
+                    if (raw == null) throw new IOException("cannot open source");
+                    encrypted = ArchiveCrypto.stagePayload(new BufferedInputStream(raw), output, password);
                 }
             }
-            // Do not touch provider data until the complete GCM payload has authenticated.
-            PreparedRestore prepared = new PreparedRestore(plaintext, RestoreEngine.inspect(plaintext), encrypted);
+            PreparedRestore prepared = new PreparedRestore(plaintext, encrypted);
             ownershipTransferred = true;
             return prepared;
         } finally {
             Arrays.fill(password, '\0');
-            // Ownership moves to PreparedRestore only after it is constructed successfully.
-            // On every failure, remove the authenticated payload from the cache immediately.
-            if (!ownershipTransferred && plaintext != null) plaintext.delete();
+            if (stage != null) stage.delete();
+            if (!ownershipTransferred && plaintext != null) closeStage(plaintext);
         }
+    }
+
+    private static void closeStage(FileInputStream stage) {
+        try { stage.close(); } catch (IOException ignored) { }
     }
 
     public static synchronized RestoreEngine.RestoreSummary restore(Context context, Uri source, char[] password)
@@ -147,36 +146,41 @@ public final class ArchiveFormat {
     }
 
     public static final class PreparedRestore implements java.io.Closeable {
-        private final File plaintext;
+        private final FileInputStream plaintext;
         public final RestoreEngine.ArchiveSummary summary;
         public final boolean encrypted;
         private boolean closed;
 
-        private PreparedRestore(File plaintext, RestoreEngine.ArchiveSummary summary, boolean encrypted) {
+        private PreparedRestore(FileInputStream plaintext, boolean encrypted) throws IOException {
             this.plaintext = plaintext;
-            this.summary = summary;
+            this.summary = RestoreEngine.inspect(reopenPayload());
             this.encrypted = encrypted;
         }
 
         public RestoreEngine.RestoreSummary restore(Context context,
                 boolean includeSms, boolean includeCalls) throws Exception {
-            if (closed) throw new IOException("restore session is closed");
-            return RestoreEngine.restore(context, plaintext, includeSms, includeCalls,
-                    includeSms, includeSms, summary);
+            return restore(context, includeSms, includeCalls, null);
         }
 
-        public RestoreEngine.RestoreSummary restore(Context context,
+        public synchronized RestoreEngine.RestoreSummary restore(Context context,
                 boolean includeSms, boolean includeCalls,
                 RestoreEngine.ProgressListener listener) throws Exception {
             if (closed) throw new IOException("restore session is closed");
-            return RestoreEngine.restore(context, plaintext, includeSms, includeCalls,
+            return RestoreEngine.restore(context, reopenPayload(), includeSms, includeCalls,
                     includeSms, includeSms, summary, listener);
         }
 
-        @Override public void close() {
+        private InputStream reopenPayload() throws IOException {
+            plaintext.getChannel().position(0);
+            return new FilterInputStream(plaintext) {
+                @Override public void close() { } // PreparedRestore owns the descriptor.
+            };
+        }
+
+        @Override public synchronized void close() {
             if (!closed) {
                 closed = true;
-                plaintext.delete();
+                closeStage(plaintext);
             }
         }
     }
