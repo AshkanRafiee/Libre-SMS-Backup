@@ -1,1 +1,2 @@
 Fixed a restore error that rejected large encrypted backups on recent Android versions. You can retry with your original backup file and password.
+Restoring large MMS attachments now uses less memory.

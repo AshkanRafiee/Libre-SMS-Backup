@@ -73,4 +73,19 @@ public class RestoreEngineTest extends TestCase {
             archive.delete();
         }
     }
+
+    public void testTrailingJsonIsRejectedBeforeRestore() throws Exception {
+        File archive = File.createTempFile("libresms-restore-test-", ".json");
+        try {
+            try (FileOutputStream output = new FileOutputStream(archive)) {
+                output.write("{\"schema\":2,\"sms\":[],\"calls\":[]}{}".getBytes(StandardCharsets.UTF_8));
+            }
+            try {
+                RestoreEngine.inspect(archive);
+                fail("trailing data must be rejected during inspection");
+            } catch (java.io.IOException expected) { }
+        } finally {
+            archive.delete();
+        }
+    }
 }

@@ -17,7 +17,6 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -153,7 +152,7 @@ public final class ArchiveFormat {
 
         private PreparedRestore(FileInputStream plaintext, boolean encrypted) throws IOException {
             this.plaintext = plaintext;
-            this.summary = RestoreEngine.inspect(reopenPayload());
+            this.summary = RestoreEngine.inspect(plaintext.getChannel());
             this.encrypted = encrypted;
         }
 
@@ -166,15 +165,8 @@ public final class ArchiveFormat {
                 boolean includeSms, boolean includeCalls,
                 RestoreEngine.ProgressListener listener) throws Exception {
             if (closed) throw new IOException("restore session is closed");
-            return RestoreEngine.restore(context, reopenPayload(), includeSms, includeCalls,
+            return RestoreEngine.restore(context, plaintext.getChannel(), includeSms, includeCalls,
                     includeSms, includeSms, summary, listener);
-        }
-
-        private InputStream reopenPayload() throws IOException {
-            plaintext.getChannel().position(0);
-            return new FilterInputStream(plaintext) {
-                @Override public void close() { } // PreparedRestore owns the descriptor.
-            };
         }
 
         @Override public synchronized void close() {

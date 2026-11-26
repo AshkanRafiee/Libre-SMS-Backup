@@ -16,21 +16,29 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /** Restores an already authenticated archive without parsing the complete payload into memory. */
 public final class RestoreEngine {
     private static final String[] SMS_KEY_COLUMNS = {"address", "date", "type", "body"};
     private static final String[] CALL_KEY_COLUMNS = {"number", "date", "duration", "type"};
+    private static final String[] MMS_KEY_COLUMNS = {Telephony.Mms.DATE, Telephony.Mms.MESSAGE_BOX,
+            Telephony.Mms.SUBJECT, Telephony.Mms.CONTENT_TYPE, Telephony.Mms.MESSAGE_ID, Telephony.Mms.TRANSACTION_ID};
+    // MMS PDU address types (WAP-209-MMSEncapsulation).
+    private static final int MMS_FROM = 137;
+    private static final int MMS_TO = 151;
+    private static final int MMS_CC = 130;
     private static final int MAX_MMS_PART_BYTES = 64 * 1024 * 1024;
 
     public interface ProgressListener {
@@ -40,13 +48,15 @@ public final class RestoreEngine {
     private RestoreEngine() {}
 
     public static ArchiveSummary inspect(File plaintext) throws IOException {
-        return inspect(new FileInputStream(plaintext));
+        try (FileInputStream input = new FileInputStream(plaintext)) {
+            return inspect(input.getChannel());
+        }
     }
 
-    public static ArchiveSummary inspect(InputStream plaintext) throws IOException {
+    public static ArchiveSummary inspect(FileChannel plaintext) throws IOException {
         ArchiveSummary result = new ArchiveSummary();
         int schema = -1;
-        try (JsonReader reader = new JsonReader(new InputStreamReader(plaintext, StandardCharsets.UTF_8))) {
+        try (JsonReader reader = openJson(plaintext)) {
             reader.beginObject();
             while (reader.hasNext()) {
                 String name = reader.nextName();
@@ -58,10 +68,16 @@ public final class RestoreEngine {
                 else reader.skipValue();
             }
             reader.endObject();
+            if (reader.peek() != JsonToken.END_DOCUMENT) throw new IOException("unexpected data after backup payload");
         }
         if (schema != com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat.PAYLOAD_SCHEMA)
             throw new IOException("unsupported backup payload version");
         return result;
+    }
+
+    private static JsonReader openJson(FileChannel plaintext) throws IOException {
+        InputStream input = AttachmentJsonInput.openRange(plaintext, 0, plaintext.size());
+        return new JsonReader(new InputStreamReader(new AttachmentJsonInput(input), StandardCharsets.UTF_8));
     }
 
     public static RestoreSummary restore(Context context, File plaintext) throws Exception {
@@ -87,22 +103,24 @@ public final class RestoreEngine {
     public static RestoreSummary restore(Context context, File plaintext,
             boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
             ArchiveSummary preview, ProgressListener listener) throws Exception {
-        if (preview == null) preview = inspect(plaintext);
-        return restore(context, new FileInputStream(plaintext), includeSms, includeCalls, includeMms, includeRcs,
-                preview, listener);
-    }
-
-    /** Takes ownership of the payload stream and uses the summary from its earlier inspection. */
-    public static RestoreSummary restore(Context context, InputStream plaintext,
-            boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
-            ArchiveSummary preview, ProgressListener listener) throws Exception {
-        try (JsonReader reader = new JsonReader(new InputStreamReader(plaintext, StandardCharsets.UTF_8))) {
-            return restore(context, reader, includeSms, includeCalls, includeMms, includeRcs,
-                    Objects.requireNonNull(preview), listener);
+        try (FileInputStream input = new FileInputStream(plaintext)) {
+            return restore(context, input.getChannel(), includeSms, includeCalls, includeMms, includeRcs,
+                    preview, listener);
         }
     }
 
-    private static RestoreSummary restore(Context context, JsonReader reader,
+    /** Reads the authenticated payload without closing or changing the position of the caller's channel. */
+    public static RestoreSummary restore(Context context, FileChannel plaintext,
+            boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
+            ArchiveSummary preview, ProgressListener listener) throws Exception {
+        if (preview == null) preview = inspect(plaintext);
+        try (JsonReader reader = openJson(plaintext)) {
+            return restore(context, reader, plaintext, includeSms, includeCalls, includeMms, includeRcs,
+                    preview, listener);
+        }
+    }
+
+    private static RestoreSummary restore(Context context, JsonReader reader, FileChannel plaintext,
             boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
             ArchiveSummary preview, ProgressListener listener) throws Exception {
         ContentResolver resolver = context.getContentResolver();
@@ -120,7 +138,7 @@ public final class RestoreEngine {
         int[] completed = {0};
         reportProgress(listener, completed[0], total);
         boolean mmsProviderAvailable = true;
-        Set<String> existingMms = new HashSet<>();
+        Map<String, Integer> existingMms = new HashMap<>();
         if (includeMms && preview.mmsCount > 0) {
             try {
                 existingMms = existingMmsKeys(resolver);
@@ -141,7 +159,7 @@ public final class RestoreEngine {
                         null, listener, completed, total);
                 else reader.skipValue();
             } else if ("mms".equals(name)) {
-                if (includeMms) restoreMmsSection(reader, resolver, existingMms, result, mmsProviderAvailable,
+                if (includeMms) restoreMmsSection(context, reader, plaintext, existingMms, result, mmsProviderAvailable,
                         listener, completed, total);
                 else reader.skipValue();
             } else if ("rcs".equals(name)) {
@@ -363,8 +381,8 @@ public final class RestoreEngine {
         if (threadId != null) values.put("thread_id", threadId);
     }
 
-    private static void restoreMmsSection(JsonReader reader, ContentResolver resolver,
-            Set<String> existing, RestoreSummary result, boolean providerAvailable,
+    private static void restoreMmsSection(Context context, JsonReader reader, FileChannel plaintext,
+            Map<String, Integer> existing, RestoreSummary result, boolean providerAvailable,
             ProgressListener listener, int[] completed, int total) throws IOException {
         reader.beginObject();
         while (reader.hasNext()) {
@@ -372,7 +390,7 @@ public final class RestoreEngine {
             if ("messages".equals(name)) {
                 reader.beginArray();
                 while (reader.hasNext()) {
-                    if (providerAvailable) restoreMmsMessage(reader, resolver, existing, result);
+                    if (providerAvailable) restoreMmsMessage(context, reader, plaintext, existing, result);
                     else { reader.skipValue(); result.failed++; }
                     reportProgress(listener, ++completed[0], total);
                 }
@@ -382,8 +400,8 @@ public final class RestoreEngine {
         reader.endObject();
     }
 
-    private static void restoreMmsMessage(JsonReader reader, ContentResolver resolver,
-            Set<String> existing, RestoreSummary result) throws IOException {
+    private static void restoreMmsMessage(Context context, JsonReader reader, FileChannel plaintext,
+            Map<String, Integer> existing, RestoreSummary result) throws IOException {
         ContentValues message = new ContentValues();
         List<MmsPart> parts = new ArrayList<>();
         List<ContentValues> addresses = new ArrayList<>();
@@ -399,10 +417,23 @@ public final class RestoreEngine {
         }
         reader.endObject();
         if (dateMs != null) message.put("date", dateMs / 1000L);
+        if (message.containsKey("ct")) {
+            if (!message.containsKey(Telephony.Mms.CONTENT_TYPE))
+                message.put(Telephony.Mms.CONTENT_TYPE, message.getAsString("ct"));
+            message.remove("ct"); // "ct" is the parts column; the MMS row uses "ct_t".
+        }
         String key = mmsKey(message);
-        if (existing.contains(key)) { result.duplicates++; return; }
+        Integer remainingMatches = existing.get(key);
+        if (remainingMatches != null) {
+            if (remainingMatches == 1) existing.remove(key);
+            else existing.put(key, remainingMatches - 1);
+            result.duplicates++;
+            return;
+        }
+        ContentResolver resolver = context.getContentResolver();
         Uri inserted = null;
         try {
+            attachMmsThread(context, message, addresses);
             inserted = resolver.insert(Telephony.Mms.CONTENT_URI, message);
             if (inserted == null) throw new SecurityException("provider rejected MMS");
             String id = inserted.getLastPathSegment();
@@ -415,22 +446,40 @@ public final class RestoreEngine {
                 part.values.put("mid", Long.parseLong(id));
                 Uri partUri = resolver.insert(Uri.parse("content://mms/" + id + "/part"), part.values);
                 if (partUri == null) throw new SecurityException("provider rejected MMS part");
-                if (part.dataBase64 != null) {
-                    byte[] data = android.util.Base64.decode(part.dataBase64, android.util.Base64.DEFAULT);
-                    if (data.length > MAX_MMS_PART_BYTES) throw new IOException("MMS part too large");
-                    try (java.io.OutputStream output = resolver.openOutputStream(partUri)) {
-                        if (output == null) throw new IOException("cannot open MMS part");
-                        output.write(data);
-                    }
-                    java.util.Arrays.fill(data, (byte) 0);
-                }
+                if (part.dataRange != null) copyMmsData(plaintext, part.dataRange, resolver, partUri);
             }
-            existing.add(key);
             result.mmsAdded++;
         } catch (Exception error) {
             if (inserted != null) try { resolver.delete(inserted, null, null); } catch (Exception ignored) { }
             result.failed++;
         }
+    }
+
+    private static void attachMmsThread(Context context, ContentValues message, List<ContentValues> addresses) {
+        Integer box = message.getAsInteger(Telephony.Mms.MESSAGE_BOX);
+        boolean incoming = box != null && box == Telephony.Mms.MESSAGE_BOX_INBOX;
+        Set<String> recipients = new HashSet<>();
+        Set<String> incomingTo = new HashSet<>();
+        boolean copyRecipient = false;
+        for (ContentValues row : addresses) {
+            Integer type = row.getAsInteger(Telephony.Mms.Addr.TYPE);
+            String address = row.getAsString(Telephony.Mms.Addr.ADDRESS);
+            if (type == null || address == null || address.isEmpty() || "insert-address-token".equals(address)) continue;
+            if (incoming) {
+                if (type == MMS_FROM) recipients.add(address);
+                else if (type == MMS_TO) incomingTo.add(address);
+                else if (type == MMS_CC) copyRecipient = true;
+            } else if (type == MMS_TO || type == MMS_CC) {
+                recipients.add(address);
+            }
+        }
+        // Legacy archives do not identify the source phone's own number in a group.
+        // Preserve the addresses without guessing a sender-only thread for a known group.
+        if (incoming && (incomingTo.size() > 1 || copyRecipient)) return;
+        if (recipients.isEmpty()) return;
+        try {
+            message.put(Telephony.Mms.THREAD_ID, Telephony.Threads.getOrCreateThreadId(context, recipients));
+        } catch (IllegalArgumentException | SecurityException ignored) { }
     }
 
     private static void readMmsParts(JsonReader reader, List<MmsPart> parts) throws IOException {
@@ -446,11 +495,54 @@ public final class RestoreEngine {
                 else reader.skipValue();
             }
             reader.endObject();
-            if (data != null && data.length() > ((MAX_MMS_PART_BYTES + 2L) / 3L) * 4L)
-                throw new IOException("MMS part too large");
             parts.add(new MmsPart(values, data));
         }
         reader.endArray();
+    }
+
+    private static void copyMmsData(FileChannel plaintext, String range, ContentResolver resolver, Uri partUri)
+            throws IOException {
+        int separator = range.indexOf(':');
+        if (separator < 0) throw new IOException("invalid MMS attachment range");
+        long offset = Long.parseLong(range.substring(0, separator));
+        long length = Long.parseLong(range.substring(separator + 1));
+        long size = plaintext.size();
+        if (offset < 0 || length < 0 || offset > size || length > size - offset)
+            throw new IOException("invalid MMS attachment range");
+        byte[] encodedBuffer = new byte[32 * 1024]; // Keep complete Base64 quartets between chunks.
+        byte[] decodedBuffer = new byte[24 * 1024];
+        java.util.Base64.Decoder decoder = java.util.Base64.getDecoder();
+        try (InputStream encoded = AttachmentJsonInput.openBase64(plaintext, offset, length);
+             OutputStream output = resolver.openOutputStream(partUri)) {
+            if (output == null) throw new IOException("cannot open MMS part");
+            int remaining = MAX_MMS_PART_BYTES;
+            while (true) {
+                int lengthRead = 0;
+                while (lengthRead < encodedBuffer.length) {
+                    int next = encoded.read();
+                    if (next == -1) break;
+                    encodedBuffer[lengthRead++] = (byte) next;
+                }
+                if (lengthRead == 0) break;
+                boolean last = lengthRead < encodedBuffer.length || encodedBuffer[lengthRead - 1] == '=';
+                byte[] block = lengthRead == encodedBuffer.length ? encodedBuffer
+                        : Arrays.copyOf(encodedBuffer, lengthRead);
+                int count;
+                try {
+                    count = decoder.decode(block, decodedBuffer);
+                } finally {
+                    if (block != encodedBuffer) Arrays.fill(block, (byte) 0);
+                }
+                if (last && encoded.read() != -1) throw new IOException("invalid MMS attachment padding");
+                if (count > remaining) throw new IOException("MMS part too large");
+                output.write(decodedBuffer, 0, count);
+                remaining -= count;
+                if (last) break;
+            }
+        } finally {
+            Arrays.fill(encodedBuffer, (byte) 0);
+            Arrays.fill(decodedBuffer, (byte) 0);
+        }
     }
 
     private static void readMmsAddresses(JsonReader reader, List<ContentValues> addresses) throws IOException {
@@ -527,15 +619,14 @@ public final class RestoreEngine {
         if (listener != null) listener.onProgress(completed, total);
     }
 
-    private static Set<String> existingMmsKeys(ContentResolver resolver) throws IOException {
-        Set<String> keys = new HashSet<>();
-        try (Cursor cursor = resolver.query(Telephony.Mms.CONTENT_URI,
-                new String[]{"date", "msg_box", "sub", "ct"}, null, null, null)) {
+    private static Map<String, Integer> existingMmsKeys(ContentResolver resolver) throws IOException {
+        Map<String, Integer> keys = new HashMap<>();
+        try (Cursor cursor = resolver.query(Telephony.Mms.CONTENT_URI, MMS_KEY_COLUMNS, null, null, null)) {
             if (cursor == null) throw new IOException("MMS provider unavailable");
             while (cursor.moveToNext()) {
                 StringBuilder key = new StringBuilder();
                 for (int i = 0; i < cursor.getColumnCount(); i++) key.append(cursor.isNull(i) ? "<null>" : cursor.getString(i)).append('\u001f');
-                keys.add(key.toString());
+                keys.merge(key.toString(), 1, Integer::sum);
             }
         } catch (SecurityException | IllegalArgumentException e) {
             throw new IOException("MMS provider unavailable", e);
@@ -545,15 +636,15 @@ public final class RestoreEngine {
 
     private static String mmsKey(ContentValues values) {
         StringBuilder key = new StringBuilder();
-        for (String name : new String[]{"date", "msg_box", "sub", "ct"})
+        for (String name : MMS_KEY_COLUMNS)
             key.append(values.getAsString(name) == null ? "<null>" : values.getAsString(name)).append('\u001f');
         return key.toString();
     }
 
     private static final class MmsPart {
         final ContentValues values;
-        final String dataBase64;
-        MmsPart(ContentValues values, String dataBase64) { this.values = values; this.dataBase64 = dataBase64; }
+        final String dataRange;
+        MmsPart(ContentValues values, String dataRange) { this.values = values; this.dataRange = dataRange; }
     }
 
     private static Set<String> existingKeys(ContentResolver resolver, Uri uri, String[] columns,
