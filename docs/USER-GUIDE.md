@@ -8,7 +8,7 @@
 
 ### What gets saved
 
-- **Messages:** SMS and any MMS the device exposes. Some MMS attachments may be unavailable or too large to include.
+- **Messages:** SMS and any MMS the device exposes. Attachments larger than 64 MiB or that the app cannot read are left out. The backup result shows how many attachments were left out.
 - **Call logs:** Call-history entries, not audio recordings.
 - **RCS:** Only records exposed by a compatible provider. This is not a full backup of your messaging app. Compatible RCS text can be restored **as SMS**, not as native RCS conversations; RCS attachments are not restored.
 - **Restricted messages:** Android may hide some messages unless the backup app temporarily holds the default SMS role. This is a separate option for manual backups, not a guarantee that all RCS records are readable.
@@ -16,6 +16,8 @@
 ## Schedule backups and manage old copies
 
 Choose a daily, weekly, or monthly schedule. Each run uses your current content and encryption settings. Android's **Alarms & reminders** access can help backups run at the chosen time. Battery and background restrictions can delay or skip a run. Optional notifications show what each scheduled backup saved.
+
+Allow notifications for Libre SMS Backup in Android settings to see scheduled failures and attachment omissions without opening the app. You can also see the latest backup result on the app’s home screen.
 
 Selecting **Restricted messages** turns off scheduled backups. When you deselect it, the app can restore the previous schedule. Check the next run after changing this setting or moving the backup folder.
 
@@ -28,6 +30,8 @@ Each backup is a versioned Libre SMS Backup archive. An unencrypted `.lsb` can b
 Encryption is off by default. Turning it on or off only affects future backups. Keep the original password separately from the archive: a different phone cannot retrieve it for you, and the project cannot recover it. Clearing app data removes the app's settings and saved password but does not remove the archives from your chosen folder.
 
 Very large backups can exceed the app's size limit. The memory available to the app limits creation of password-protected backups and, on some Android versions, also limits restoring them. Restoring a large backup needs free storage for the temporary data used during the check and import. If a backup is too large to create, try backing up messages and call logs separately. If an existing archive is too large to restore, keep the original file.
+
+An unencrypted backup can contain up to 2 GiB of backup data. For encrypted backup creation the limit is one quarter of the memory Android allows the app to use, up to 512 MiB. A backup also fails if a single field exceeds 4 MiB once encoded, a record exceeds 8 MiB or 1,024 fields, or an MMS has more than 8 MiB of information apart from its attachment files or more than 4,096 parts and address entries combined. These limits do not cap the total number of messages or calls. If a record exceeds a limit, no new backup is saved.
 
 ## Restore or move to a new phone
 

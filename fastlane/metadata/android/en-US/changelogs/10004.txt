@@ -1,3 +1,4 @@
 Fixed a restore error that rejected large encrypted backups on recent Android versions. You can retry with your original backup file and password.
 Backing up and restoring large MMS attachments now uses less memory.
 Fixed some cases where restoring MMS could skip a different message or miss its group conversation.
+Backup results now explain when a limit prevents saving or attachments are left out, including in scheduled backup notifications.
