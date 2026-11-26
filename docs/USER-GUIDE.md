@@ -27,13 +27,15 @@ Each backup is a versioned Libre SMS Backup archive. An unencrypted `.lsb` can b
 
 Encryption is off by default. Turning it on or off only affects future backups. Keep the original password separately from the archive: a different phone cannot retrieve it for you, and the project cannot recover it. Clearing app data removes the app's settings and saved password but does not remove the archives from your chosen folder.
 
-Very large backups can exceed the app's size limit. You also need enough free space on the phone to check a backup before restoring it. On some Android versions, the amount of memory available to the app still limits password-protected restores. If a backup is too large to create, try backing up messages and call logs separately. If an existing archive is too large to restore, keep the original file.
+Very large backups can exceed the app's size limit. The memory available to the app limits creation of password-protected backups and, on some Android versions, also limits restoring them. Restoring a large backup needs free storage for the temporary data used during the check and import. If a backup is too large to create, try backing up messages and call logs separately. If an existing archive is too large to restore, keep the original file.
 
 ## Restore or move to a new phone
 
 1. Before resetting or replacing your phone, copy a recent archive somewhere you can reach without it. Keep the password if the archive is encrypted.
 2. Install Libre SMS Backup on the destination phone, open **Restore from backup**, and choose the archive. Enter its password if prompted. The app authenticates an encrypted archive before writing records and warns you if the archive is not encrypted.
 3. Review the preview and choose messages, calls, or both. Android may require the default SMS role for message restore and write access for restoring call logs. Matching records are skipped; check the final summary for anything that could not be restored.
+
+Some older backups do not contain enough information to recreate incoming MMS group conversations on the new phone. Keep the original archive if those messages do not appear in your messaging app.
 
 **Switch back to your regular SMS app when done.** Libre SMS Backup does not handle incoming MMS while it is the default SMS app. Avoid the temporary switch when you're expecting MMS. The app guides you back to Android's default-app settings.
 
