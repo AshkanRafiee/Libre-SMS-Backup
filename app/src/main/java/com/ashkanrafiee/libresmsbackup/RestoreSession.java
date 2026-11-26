@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.ashkanrafiee.libresmsbackup.archive.ArchiveCrypto;
 import com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat;
@@ -174,9 +175,12 @@ final class RestoreSession {
         changed();
         executor.execute(() -> {
             RestoreEngine.RestoreSummary result;
+            long[] lastProgress = {0};
             try (ArchiveFormat.PreparedRestore owned = payload) {
                 result = owned.restore(application, includeSms, includeCalls, (completed, total) -> {
-                    if (completed != total && completed != 1 && completed % 10 != 0) return;
+                    long now = SystemClock.uptimeMillis();
+                    if (completed != total && completed > 1 && now - lastProgress[0] < 100) return;
+                    lastProgress[0] = now;
                     main.post(() -> {
                         completedRecords = completed;
                         totalRecords = total;

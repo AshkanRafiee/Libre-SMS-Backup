@@ -8,6 +8,8 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 
+import com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat;
+
 /**
  * Replaces attachment strings with byte ranges in the staged JSON.
  * The regular JSON parser still handles the surrounding structure and metadata.
@@ -15,18 +17,14 @@ import java.util.ArrayDeque;
 final class AttachmentJsonInput extends InputStream {
     private static final String ATTACHMENT = "dataBase64";
     private static final int MAX_DEPTH = 128;
-    private static final int MAX_OBJECT_FIELDS = 1024;
-    private static final int MAX_TOKEN_BYTES = 4 * 1024 * 1024;
-    private static final int MAX_MMS_METADATA_BYTES = 8 * 1024 * 1024;
-    private static final int MAX_MMS_CHILDREN = 4096;
     private enum Scope { DOCUMENT, ROOT, MMS, MESSAGES, MESSAGE, PARTS, PART, ADDRESSES, ADDRESS,
-        RCS, FILES, FILE, OTHER }
+        SMS, CALLS, RECORD, RCS, CHATS, CHAT, FILES, FILE, OTHER }
 
     private final InputStream source;
     private final byte[] buffer = new byte[8192];
     private final ArrayDeque<Scope> scopes = new ArrayDeque<>();
     private final int[] fieldsAtDepth = new int[MAX_DEPTH];
-    private final boolean[] mmsRowAtDepth = new boolean[MAX_DEPTH];
+    private final boolean[] rowAtDepth = new boolean[MAX_DEPTH];
     private int position;
     private int size;
     private long offset;
@@ -37,6 +35,8 @@ final class AttachmentJsonInput extends InputStream {
     private int messageMetadataBytes;
     private int messageChildren;
     private boolean inMmsMessage;
+    private int rowBytes;
+    private boolean inRecord;
     private boolean possibleName;
     private boolean pendingColon;
     private boolean pendingValue;
@@ -61,8 +61,10 @@ final class AttachmentJsonInput extends InputStream {
 
     @Override public int read() throws IOException {
         int value = nextJsonByte();
-        if (inMmsMessage && value != -1 && ++messageMetadataBytes > MAX_MMS_METADATA_BYTES)
+        if (inMmsMessage && value != -1 && ++messageMetadataBytes > ArchiveFormat.MAX_MMS_METADATA_BYTES)
             throw new IOException("MMS metadata is too large");
+        if (inRecord && value != -1 && ++rowBytes > ArchiveFormat.MAX_RECORD_METADATA_BYTES)
+            throw new IOException("backup row is too large");
         return value;
     }
 
@@ -122,12 +124,13 @@ final class AttachmentJsonInput extends InputStream {
 
         if (value == ':') {
             int depth = scopes.size() - 1;
-            if (depth >= 0 && ++fieldsAtDepth[depth] > MAX_OBJECT_FIELDS)
+            if (depth >= 0 && ++fieldsAtDepth[depth] > ArchiveFormat.MAX_OBJECT_FIELDS)
                 throw new IOException("backup object has too many fields");
-            if (pendingColon && (scope == Scope.MESSAGE || scope == Scope.PART || scope == Scope.ADDRESS)
+            if (pendingColon && (scope == Scope.MESSAGE || scope == Scope.PART || scope == Scope.ADDRESS
+                    || scope == Scope.CHAT || scope == Scope.FILE)
                     && matchesName("row")) {
-                if (mmsRowAtDepth[depth]) throw new IOException("duplicate MMS row");
-                mmsRowAtDepth[depth] = true;
+                if (rowAtDepth[depth]) throw new IOException("duplicate message row");
+                rowAtDepth[depth] = true;
             }
             tokenBytes = 0;
             pendingValue = pendingColon;
@@ -136,7 +139,7 @@ final class AttachmentJsonInput extends InputStream {
                 tokenBytes = 0;
                 if (scopes.size() >= MAX_DEPTH) throw new IOException("backup payload is nested too deeply");
                 fieldsAtDepth[scopes.size()] = 0;
-                mmsRowAtDepth[scopes.size()] = false;
+                rowAtDepth[scopes.size()] = false;
                 Scope child = childScope(scope, value);
                 scopes.push(child);
                 if (child == Scope.MESSAGE) {
@@ -144,11 +147,18 @@ final class AttachmentJsonInput extends InputStream {
                     messageMetadataBytes = 0;
                     messageChildren = 0;
                 }
-                if ((child == Scope.PART || child == Scope.ADDRESS) && ++messageChildren > MAX_MMS_CHILDREN)
+                if (child == Scope.RECORD) {
+                    inRecord = true;
+                    rowBytes = 1; // The closing brace ends accounting but still counts toward the limit.
+                }
+                if ((child == Scope.PART || child == Scope.ADDRESS)
+                        && ++messageChildren > ArchiveFormat.MAX_MMS_CHILDREN)
                     throw new IOException("MMS has too many parts or addresses");
             } else if ((value == '}' || value == ']') && !scopes.isEmpty()) {
                 tokenBytes = 0;
-                if (scopes.pop() == Scope.MESSAGE) inMmsMessage = false;
+                Scope closed = scopes.pop();
+                if (closed == Scope.MESSAGE) inMmsMessage = false;
+                if (closed == Scope.RECORD) inRecord = false;
             } else if (value == '"') {
                 tokenBytes = 0;
                 quoted = true;
@@ -166,7 +176,7 @@ final class AttachmentJsonInput extends InputStream {
     }
 
     private void countTokenByte() throws IOException {
-        if (++tokenBytes > MAX_TOKEN_BYTES) throw new IOException("backup metadata value is too large");
+        if (++tokenBytes > ArchiveFormat.MAX_TOKEN_BYTES) throw new IOException("backup metadata value is too large");
     }
 
     private Scope childScope(Scope parent, int opener) throws IOException {
@@ -175,18 +185,29 @@ final class AttachmentJsonInput extends InputStream {
             if (parent == Scope.MESSAGES) return Scope.MESSAGE;
             if (parent == Scope.PARTS) return Scope.PART;
             if (parent == Scope.ADDRESSES) return Scope.ADDRESS;
+            if (parent == Scope.CHATS) return Scope.CHAT;
             if (parent == Scope.FILES) return Scope.FILE;
+            if (parent == Scope.SMS || parent == Scope.CALLS
+                    || (pendingValue && (parent == Scope.CHAT || parent == Scope.FILE) && matchesName("row")))
+                return Scope.RECORD;
             if (parent == Scope.ROOT && pendingValue) {
                 if (matchesName("mms")) return Scope.MMS;
                 if (matchesName("rcs")) return Scope.RCS;
             }
         } else if (pendingValue) {
+            if (parent == Scope.ROOT) {
+                if (matchesName("sms")) return Scope.SMS;
+                if (matchesName("calls")) return Scope.CALLS;
+            }
             if (parent == Scope.MMS && matchesName("messages")) return Scope.MESSAGES;
             if (parent == Scope.MESSAGE) {
                 if (matchesName("parts")) return Scope.PARTS;
                 if (matchesName("addresses")) return Scope.ADDRESSES;
             }
-            if (parent == Scope.RCS && matchesName("files")) return Scope.FILES;
+            if (parent == Scope.RCS) {
+                if (matchesName("chats")) return Scope.CHATS;
+                if (matchesName("files")) return Scope.FILES;
+            }
         }
         return Scope.OTHER;
     }

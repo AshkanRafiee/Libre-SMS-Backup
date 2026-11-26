@@ -159,6 +159,30 @@ public class LargeMmsRestoreTest extends TestCase {
         }
     }
 
+    public void testDifferentAttachmentWithSameHeadersIsNotSkipped() throws Exception {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File archive = File.createTempFile("same-header-mms-", ".json", context.getCacheDir());
+        try (TestMmsProvider provider = new TestMmsProvider(context)) {
+            Context restoreContext = provider.wrap(context);
+            for (String part : new String[]{"YQ==", "Yg=="}) {
+                try (OutputStream output = new FileOutputStream(archive)) {
+                    writeJson(output, MMS_START + "{\"row\":{\"ct\":\"application/octet-stream\"},"
+                            + "\"dataBase64\":\"" + part + "\"}" + MMS_END);
+                }
+                RestoreEngine.RestoreSummary result = RestoreEngine.restore(restoreContext, archive, true, false);
+                assertEquals(1, result.mmsAdded);
+                assertEquals(0, result.duplicates);
+            }
+            assertEquals(2, provider.messages.size());
+            RestoreEngine.RestoreSummary retry = RestoreEngine.restore(restoreContext, archive, true, false);
+            assertEquals(0, retry.mmsAdded);
+            assertEquals(1, retry.duplicates);
+        } finally {
+            archive.delete();
+        }
+    }
+
     public void testLegacyIncomingGroupDoesNotGetSenderOnlyThread() throws Exception {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -281,6 +305,11 @@ public class LargeMmsRestoreTest extends TestCase {
         @Override public boolean onCreate() { return true; }
 
         @Override public Cursor query(Uri uri, String[] projection, String selection, String[] args, String order) {
+            if (projection == null) {
+                projection = "addr".equals(uri.getLastPathSegment())
+                        ? new String[]{"address", "type", "charset"}
+                        : new String[]{"_id", "_data", "ct", "name", "text", "seq"};
+            }
             MatrixCursor cursor = new MatrixCursor(projection);
             if ("mms-sms".equals(uri.getAuthority())) {
                 assertEquals("/threadID", uri.getPath());
@@ -289,28 +318,52 @@ public class LargeMmsRestoreTest extends TestCase {
                 return cursor;
             }
             if (!Telephony.Sms.CONTENT_URI.equals(uri)) {
-                assertEquals(Telephony.Mms.CONTENT_URI, uri);
-                for (ContentValues existing : messages) {
-                    MatrixCursor.RowBuilder row = cursor.newRow();
-                    for (String column : projection) row.add(existing.get(column));
+                if (Telephony.Mms.CONTENT_URI.equals(uri)) {
+                    for (ContentValues existing : messages) addRow(cursor, projection, existing);
+                } else {
+                    List<String> path = uri.getPathSegments();
+                    assertEquals("mms", uri.getAuthority());
+                    assertEquals(2, path.size());
+                    long id = Long.parseLong(path.get(0));
+                    if ("addr".equals(path.get(1))) {
+                        for (ContentValues address : addresses) {
+                            if (Long.valueOf(id).equals(address.getAsLong("msg_id")))
+                                addRow(cursor, projection, address);
+                        }
+                    } else {
+                        assertEquals("part", path.get(1));
+                        for (ContentValues part : parts) {
+                            if (Long.valueOf(id).equals(part.getAsLong("mid")))
+                                addRow(cursor, projection, part);
+                        }
+                    }
                 }
             }
             return cursor;
         }
 
+        private static void addRow(MatrixCursor cursor, String[] projection, ContentValues values) {
+            MatrixCursor.RowBuilder row = cursor.newRow();
+            for (String column : projection) row.add(values.get(column));
+        }
+
         @Override public Uri insert(Uri uri, ContentValues values) {
             if (Telephony.Mms.CONTENT_URI.equals(uri)) {
                 message = new ContentValues(values);
+                long id = 42L + messages.size();
+                message.put("_id", id);
                 messages.add(message);
-                return ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, 41L + messages.size());
+                return ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, id);
             }
-            if (Uri.withAppendedPath(MESSAGE_URI, "addr").equals(uri)) {
+            if ("addr".equals(uri.getLastPathSegment())) {
                 addresses.add(new ContentValues(values));
                 return Uri.withAppendedPath(uri, String.valueOf(addresses.size()));
             }
-            assertEquals(Uri.withAppendedPath(MESSAGE_URI, "part"), uri);
+            assertEquals("part", uri.getLastPathSegment());
             int index = parts.size();
-            parts.add(new ContentValues(values));
+            ContentValues part = new ContentValues(values);
+            part.put("_id", index);
+            parts.add(part);
             return Uri.parse("content://mms/part/" + index);
         }
 
@@ -318,8 +371,11 @@ public class LargeMmsRestoreTest extends TestCase {
             int index = Integer.parseInt(uri.getLastPathSegment());
             assertEquals(Uri.parse("content://mms/part/" + index), uri);
             assertTrue(index >= 0 && index < parts.size());
-            partOpenCount++;
-            if (rejectSecondPart && index == 1) throw new FileNotFoundException("test rejects the second part");
+            if (!"r".equals(mode)) {
+                partOpenCount++;
+                if (rejectSecondPart && index == 1) throw new FileNotFoundException("test rejects the second part");
+                parts.get(index).put("_data", "present");
+            }
             return ParcelFileDescriptor.open(partFile(index), ParcelFileDescriptor.parseMode(mode));
         }
 

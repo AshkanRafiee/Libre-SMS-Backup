@@ -10,6 +10,7 @@ import android.provider.Telephony;
 import android.util.Base64;
 import android.util.JsonReader;
 import android.util.JsonToken;
+import android.util.LruCache;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -19,14 +20,13 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /** Restores an already authenticated archive without parsing the complete payload into memory. */
@@ -40,6 +40,15 @@ public final class RestoreEngine {
     private static final int MMS_TO = 151;
     private static final int MMS_CC = 130;
     private static final int MAX_MMS_PART_BYTES = 64 * 1024 * 1024;
+    private static final int SMS_INDEX = 1;
+    private static final int CALL_INDEX = 2;
+    private static final int MMS_INDEX = 3;
+    private static final int MMS_CANDIDATES_LOADED = 4;
+    private static final int MMS_HEADER_INDEX = 5;
+    private static final OutputStream DIGEST_SINK = new OutputStream() {
+        @Override public void write(int value) { }
+        @Override public void write(byte[] bytes, int offset, int length) { }
+    };
 
     public interface ProgressListener {
         void onProgress(int completed, int total);
@@ -63,12 +72,14 @@ public final class RestoreEngine {
                 if ("schema".equals(name)) schema = reader.nextInt();
                 else if ("sms".equals(name)) result.smsCount = countRecords(reader, result, true);
                 else if ("calls".equals(name)) result.callsCount = countRecords(reader, result, false);
-                else if ("mms".equals(name)) result.mmsCount = countNestedArray(reader, "messages");
-                else if ("rcs".equals(name)) result.rcsCount = countNestedArray(reader, "chats");
+                else if ("mms".equals(name)) result.mmsCount = inspectMmsSection(reader);
+                else if ("rcs".equals(name)) result.rcsCount = inspectRcsSection(reader);
                 else reader.skipValue();
             }
             reader.endObject();
             if (reader.peek() != JsonToken.END_DOCUMENT) throw new IOException("unexpected data after backup payload");
+        } catch (IllegalStateException | IllegalArgumentException malformed) {
+            throw new IOException("invalid backup payload structure");
         }
         if (schema != com.ashkanrafiee.libresmsbackup.archive.ArchiveFormat.PAYLOAD_SCHEMA)
             throw new IOException("unsupported backup payload version");
@@ -114,56 +125,62 @@ public final class RestoreEngine {
             boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
             ArchiveSummary preview, ProgressListener listener) throws Exception {
         if (preview == null) preview = inspect(plaintext);
-        try (JsonReader reader = openJson(plaintext)) {
-            return restore(context, reader, plaintext, includeSms, includeCalls, includeMms, includeRcs,
+        try (JsonReader reader = openJson(plaintext); RestoreIndex index = new RestoreIndex(context)) {
+            return restore(context, reader, plaintext, index, includeSms, includeCalls, includeMms, includeRcs,
                     preview, listener);
         }
     }
 
-    private static RestoreSummary restore(Context context, JsonReader reader, FileChannel plaintext,
+    private static RestoreSummary restore(Context context, JsonReader reader, FileChannel plaintext, RestoreIndex index,
             boolean includeSms, boolean includeCalls, boolean includeMms, boolean includeRcs,
             ArchiveSummary preview, ProgressListener listener) throws Exception {
         ContentResolver resolver = context.getContentResolver();
         boolean hasRcs = includeRcs && preview.rcsCount > 0;
-        Set<String> existingSms = (includeSms || includeRcs)
-                ? existingKeys(resolver, Telephony.Sms.CONTENT_URI, SMS_KEY_COLUMNS,
-                hasRcs ? Long.MIN_VALUE : preview.smsMinDate,
-                hasRcs ? Long.MAX_VALUE : preview.smsMaxDate, true) : null;
-        Set<String> existingCalls = includeCalls
-                ? existingKeys(resolver, CallLog.Calls.CONTENT_URI, CALL_KEY_COLUMNS,
-                preview.callsMinDate, preview.callsMaxDate, false) : null;
-        Map<String, Long> threadIds = new HashMap<>();
+        boolean seedComplete = false;
+        index.beginSeed();
+        boolean mmsProviderAvailable = true;
+        try {
+            if ((includeSms && preview.smsCount > 0) || hasRcs)
+                seedExistingKeys(index, SMS_INDEX, resolver, Telephony.Sms.CONTENT_URI,
+                    SMS_KEY_COLUMNS, hasRcs ? Long.MIN_VALUE : preview.smsMinDate,
+                    hasRcs ? Long.MAX_VALUE : preview.smsMaxDate);
+            if (includeCalls && preview.callsCount > 0)
+                seedExistingKeys(index, CALL_INDEX, resolver, CallLog.Calls.CONTENT_URI,
+                    CALL_KEY_COLUMNS, preview.callsMinDate, preview.callsMaxDate);
+            if (includeMms && preview.mmsCount > 0) {
+                try {
+                    seedExistingMmsKeys(index, resolver);
+                } catch (IOException unavailable) {
+                    mmsProviderAvailable = false;
+                }
+            }
+            seedComplete = true;
+        } finally {
+            index.endSeed(seedComplete);
+        }
+        LruCache<String, Long> threadIds = new LruCache<>(256);
         int total = (includeSms ? preview.smsCount : 0) + (includeCalls ? preview.callsCount : 0)
                 + (includeMms ? preview.mmsCount : 0) + (includeRcs ? preview.rcsCount : 0);
         int[] completed = {0};
         reportProgress(listener, completed[0], total);
-        boolean mmsProviderAvailable = true;
-        Map<String, Integer> existingMms = new HashMap<>();
-        if (includeMms && preview.mmsCount > 0) {
-            try {
-                existingMms = existingMmsKeys(resolver);
-            } catch (IOException unavailable) {
-                mmsProviderAvailable = false;
-            }
-        }
         RestoreSummary result = new RestoreSummary();
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
             if ("sms".equals(name)) {
-                if (includeSms) restoreArray(reader, resolver, Telephony.Sms.CONTENT_URI, true, existingSms, result,
+                if (includeSms) restoreArray(reader, resolver, Telephony.Sms.CONTENT_URI, true, index, result,
                         threadIds, listener, completed, total);
                 else reader.skipValue();
             } else if ("calls".equals(name)) {
-                if (includeCalls) restoreArray(reader, resolver, CallLog.Calls.CONTENT_URI, false, existingCalls, result,
+                if (includeCalls) restoreArray(reader, resolver, CallLog.Calls.CONTENT_URI, false, index, result,
                         null, listener, completed, total);
                 else reader.skipValue();
             } else if ("mms".equals(name)) {
-                if (includeMms) restoreMmsSection(context, reader, plaintext, existingMms, result, mmsProviderAvailable,
+                if (includeMms) restoreMmsSection(context, reader, plaintext, index, result, mmsProviderAvailable,
                         listener, completed, total);
                 else reader.skipValue();
             } else if ("rcs".equals(name)) {
-                if (includeRcs) restoreRcsSection(reader, resolver, existingSms, result,
+                if (includeRcs) restoreRcsSection(reader, resolver, index, result,
                         threadIds, listener, completed, total);
                 else reader.skipValue();
             } else {
@@ -174,32 +191,11 @@ public final class RestoreEngine {
         return result;
     }
 
-    private static int countArray(JsonReader reader) throws IOException {
-        int count = 0;
-        reader.beginArray();
-        while (reader.hasNext()) {
-            reader.skipValue();
-            if (count < Integer.MAX_VALUE) count++;
-        }
-        reader.endArray();
-        return count;
-    }
-
     private static int countRecords(JsonReader reader, ArchiveSummary summary, boolean sms) throws IOException {
         int count = 0;
         reader.beginArray();
         while (reader.hasNext()) {
-            reader.beginObject();
-            Long date = null;
-            while (reader.hasNext()) {
-                String name = reader.nextName();
-                if ("date".equals(name)) {
-                    if (reader.peek() == JsonToken.NUMBER) date = reader.nextLong();
-                    else if (reader.peek() == JsonToken.STRING) date = parseDate(reader.nextString());
-                    else reader.skipValue();
-                } else reader.skipValue();
-            }
-            reader.endObject();
+            Long date = inspectRecord(reader, sms);
             if (date != null) {
                 if (sms) {
                     summary.smsMinDate = Math.min(summary.smsMinDate, date);
@@ -215,52 +211,126 @@ public final class RestoreEngine {
         return count;
     }
 
-    private static int countNestedArray(JsonReader reader, String arrayName) throws IOException {
+    private static Long inspectRecord(JsonReader reader, boolean sms) throws IOException {
+        Long date = null;
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String name = reader.nextName();
+            JsonToken token = reader.peek();
+            if (token == JsonToken.NULL || isNonPortableColumn(name)
+                    || (sms && !isRestorableSmsColumn(name))) {
+                reader.skipValue();
+            } else if (token == JsonToken.BEGIN_OBJECT) {
+                // Match the importer's provider-blob handling without keeping the rest of the row.
+                ContentValues blob = new ContentValues(1);
+                readEncodedValue(reader, blob, name);
+                if ("date".equals(name) && blob.containsKey(name)) date = null;
+            } else if (isLongField(name, sms)) {
+                long value = token == JsonToken.NUMBER ? reader.nextLong() : parseLong(reader.nextString());
+                if ("date".equals(name)) date = value;
+            } else if (token == JsonToken.STRING || token == JsonToken.NUMBER) {
+                reader.skipValue();
+            } else {
+                throw new IOException("invalid backup row value");
+            }
+        }
+        reader.endObject();
+        return date;
+    }
+
+    private static int inspectMmsSection(JsonReader reader) throws IOException {
         int count = 0;
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
-            if (arrayName.equals(name)) count = countArray(reader);
+            if ("messages".equals(name)) {
+                reader.beginArray();
+                while (reader.hasNext()) {
+                    reader.beginObject();
+                    while (reader.hasNext()) {
+                        String field = reader.nextName();
+                        if ("row".equals(field)) inspectRecord(reader, false);
+                        else if ("dateMs".equals(field)) reader.nextLong();
+                        else if ("parts".equals(field) || "addresses".equals(field)) inspectWrappedRecords(reader);
+                        else reader.skipValue();
+                    }
+                    reader.endObject();
+                    if (count < Integer.MAX_VALUE) count++;
+                }
+                reader.endArray();
+            } else reader.skipValue();
+        }
+        reader.endObject();
+        return count;
+    }
+
+    private static int inspectRcsSection(JsonReader reader) throws IOException {
+        int count = 0;
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String name = reader.nextName();
+            if ("chats".equals(name)) count = inspectWrappedRecords(reader);
+            else if ("files".equals(name)) inspectWrappedRecords(reader);
             else reader.skipValue();
         }
         reader.endObject();
         return count;
     }
 
+    private static int inspectWrappedRecords(JsonReader reader) throws IOException {
+        int count = 0;
+        reader.beginArray();
+        while (reader.hasNext()) {
+            reader.beginObject();
+            while (reader.hasNext()) {
+                if ("row".equals(reader.nextName())) inspectRecord(reader, false);
+                else reader.skipValue(); // The scanner handles attachment strings, replacing them with ranges.
+            }
+            reader.endObject();
+            if (count < Integer.MAX_VALUE) count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
     private static void restoreArray(JsonReader reader, ContentResolver resolver, Uri uri,
-            boolean sms, Set<String> existing, RestoreSummary result,
-            Map<String, Long> threadIds,
+            boolean sms, RestoreIndex index, RestoreSummary result,
+            LruCache<String, Long> threadIds,
             ProgressListener listener, int[] completed, int total) throws IOException {
-        MessageDigest digest = sms ? smsKeyDigest() : null;
+        MessageDigest digest = keyDigest();
+        int scope = sms ? SMS_INDEX : CALL_INDEX;
         reader.beginArray();
         while (reader.hasNext()) {
             ContentValues values = readRecord(reader, sms);
             String key = keyFor(values, sms, digest);
-            if (existing.contains(key)) {
+            if (index.contains(scope, key)) {
                 result.duplicates++;
                 reportProgress(listener, ++completed[0], total);
                 continue;
             }
+            boolean inserted;
             try {
                 if (sms) {
                     attachThreadId(resolver, values, threadIds);
                 }
-                Uri inserted = resolver.insert(uri, values);
-                if (inserted == null) throw new SecurityException("provider rejected record");
-                existing.add(key);
-                if (sms) result.smsAdded++; else result.callsAdded++;
+                inserted = resolver.insert(uri, values) != null;
             } catch (Exception firstFailure) {
+                inserted = false;
+            }
+            if (!inserted) {
                 // Providers can reject provider-specific columns on another Android version. A
                 // second attempt with the stable columns is safer than dropping the whole record.
                 ContentValues minimal = minimalValues(values, sms);
                 try {
-                    Uri inserted = resolver.insert(uri, minimal);
-                    if (inserted == null) throw new SecurityException("provider rejected record");
-                    existing.add(key);
-                    if (sms) result.smsAdded++; else result.callsAdded++;
-                } catch (Exception ignored) {
-                    result.failed++;
-                }
+                    inserted = resolver.insert(uri, minimal) != null;
+                } catch (Exception ignored) { }
+            }
+            if (inserted) {
+                // Index errors must not re-enter the provider retry and insert a second copy.
+                index.add(scope, key);
+                if (sms) result.smsAdded++; else result.callsAdded++;
+            } else {
+                result.failed++;
             }
             reportProgress(listener, ++completed[0], total);
         }
@@ -356,13 +426,13 @@ public final class RestoreEngine {
     }
 
     private static void attachThreadId(ContentResolver resolver, ContentValues values,
-            Map<String, Long> threadIds) {
+            LruCache<String, Long> threadIds) {
         if (threadIds == null || values.containsKey("thread_id")) return;
         String address = values.getAsString("address");
         if (address == null || address.isEmpty()) return;
-        if (threadIds.containsKey(address)) {
-            Long threadId = threadIds.get(address);
-            if (threadId != null) values.put("thread_id", threadId);
+        Long cached = threadIds.get(address);
+        if (cached != null) {
+            if (cached != 0) values.put("thread_id", cached);
             return;
         }
         Long threadId = null;
@@ -377,12 +447,12 @@ public final class RestoreEngine {
                 }
             }
         } catch (Exception ignored) { }
-        threadIds.put(address, threadId);
+        if (address.length() <= 256) threadIds.put(address, threadId == null ? 0L : threadId);
         if (threadId != null) values.put("thread_id", threadId);
     }
 
     private static void restoreMmsSection(Context context, JsonReader reader, FileChannel plaintext,
-            Map<String, Integer> existing, RestoreSummary result, boolean providerAvailable,
+            RestoreIndex index, RestoreSummary result, boolean providerAvailable,
             ProgressListener listener, int[] completed, int total) throws IOException {
         reader.beginObject();
         while (reader.hasNext()) {
@@ -390,7 +460,7 @@ public final class RestoreEngine {
             if ("messages".equals(name)) {
                 reader.beginArray();
                 while (reader.hasNext()) {
-                    if (providerAvailable) restoreMmsMessage(context, reader, plaintext, existing, result);
+                    if (providerAvailable) restoreMmsMessage(context, reader, plaintext, index, result);
                     else { reader.skipValue(); result.failed++; }
                     reportProgress(listener, ++completed[0], total);
                 }
@@ -401,7 +471,7 @@ public final class RestoreEngine {
     }
 
     private static void restoreMmsMessage(Context context, JsonReader reader, FileChannel plaintext,
-            Map<String, Integer> existing, RestoreSummary result) throws IOException {
+            RestoreIndex index, RestoreSummary result) throws IOException {
         ContentValues message = new ContentValues();
         List<MmsPart> parts = new ArrayList<>();
         List<ContentValues> addresses = new ArrayList<>();
@@ -423,14 +493,11 @@ public final class RestoreEngine {
             message.remove("ct"); // "ct" is the parts column; the MMS row uses "ct_t".
         }
         String key = mmsKey(message);
-        Integer remainingMatches = existing.get(key);
-        if (remainingMatches != null) {
-            if (remainingMatches == 1) existing.remove(key);
-            else existing.put(key, remainingMatches - 1);
+        ContentResolver resolver = context.getContentResolver();
+        if (isExistingMms(index, key, resolver, plaintext, addresses, parts)) {
             result.duplicates++;
             return;
         }
-        ContentResolver resolver = context.getContentResolver();
         Uri inserted = null;
         try {
             attachMmsThread(context, message, addresses);
@@ -446,13 +513,55 @@ public final class RestoreEngine {
                 part.values.put("mid", Long.parseLong(id));
                 Uri partUri = resolver.insert(Uri.parse("content://mms/" + id + "/part"), part.values);
                 if (partUri == null) throw new SecurityException("provider rejected MMS part");
-                if (part.dataRange != null) copyMmsData(plaintext, part.dataRange, resolver, partUri);
+                if (part.dataRange != null) {
+                    try (OutputStream output = resolver.openOutputStream(partUri)) {
+                        if (output == null) throw new IOException("cannot open MMS part");
+                        copyMmsData(plaintext, part.dataRange, output);
+                    }
+                }
             }
             result.mmsAdded++;
         } catch (Exception error) {
             if (inserted != null) try { resolver.delete(inserted, null, null); } catch (Exception ignored) { }
             result.failed++;
         }
+    }
+
+    private static boolean isExistingMms(RestoreIndex index, String header, ContentResolver resolver,
+            FileChannel plaintext, List<ContentValues> addresses, List<MmsPart> parts) {
+        if (!index.contains(MMS_HEADER_INDEX, header)) return false;
+        if (!index.contains(MMS_CANDIDATES_LOADED, header)) {
+            try (Cursor candidates = index.mmsCandidates(header)) {
+                while (candidates.moveToNext()) {
+                    String identity;
+                    try {
+                        identity = MmsIdentity.fromProvider(resolver, candidates.getLong(0));
+                    } catch (IOException | SecurityException | IllegalArgumentException unavailable) {
+                        // An unreadable existing message cannot prove that this record is a duplicate.
+                        continue;
+                    }
+                    if (identity != null) index.count(MMS_INDEX, header + identity);
+                }
+            }
+            index.add(MMS_CANDIDATES_LOADED, header);
+        }
+        MmsIdentity identity = new MmsIdentity();
+        for (ContentValues address : addresses) identity.addAddress(address);
+        try {
+            for (MmsPart part : parts) {
+                String digest = null;
+                if (part.dataRange != null) {
+                    MessageDigest bytes = MmsIdentity.newDigest();
+                    copyMmsData(plaintext, part.dataRange, new DigestOutputStream(DIGEST_SINK, bytes));
+                    digest = MmsIdentity.digestKey(bytes);
+                }
+                identity.addPart(part.values, digest);
+            }
+        } catch (IOException | IllegalArgumentException invalidAttachment) {
+            return false; // The import path reports the failed attachment and rolls back the message.
+        }
+        String fingerprint = identity.finish();
+        return fingerprint != null && index.consume(MMS_INDEX, header + fingerprint);
     }
 
     private static void attachMmsThread(Context context, ContentValues message, List<ContentValues> addresses) {
@@ -500,7 +609,7 @@ public final class RestoreEngine {
         reader.endArray();
     }
 
-    private static void copyMmsData(FileChannel plaintext, String range, ContentResolver resolver, Uri partUri)
+    private static void copyMmsData(FileChannel plaintext, String range, OutputStream output)
             throws IOException {
         int separator = range.indexOf(':');
         if (separator < 0) throw new IOException("invalid MMS attachment range");
@@ -512,9 +621,7 @@ public final class RestoreEngine {
         byte[] encodedBuffer = new byte[32 * 1024]; // Keep complete Base64 quartets between chunks.
         byte[] decodedBuffer = new byte[24 * 1024];
         java.util.Base64.Decoder decoder = java.util.Base64.getDecoder();
-        try (InputStream encoded = AttachmentJsonInput.openBase64(plaintext, offset, length);
-             OutputStream output = resolver.openOutputStream(partUri)) {
-            if (output == null) throw new IOException("cannot open MMS part");
+        try (InputStream encoded = AttachmentJsonInput.openBase64(plaintext, offset, length)) {
             int remaining = MAX_MMS_PART_BYTES;
             while (true) {
                 int lengthRead = 0;
@@ -560,10 +667,10 @@ public final class RestoreEngine {
     }
 
     private static void restoreRcsSection(JsonReader reader, ContentResolver resolver,
-            Set<String> existingSms, RestoreSummary result,
-            Map<String, Long> threadIds,
+            RestoreIndex index, RestoreSummary result,
+            LruCache<String, Long> threadIds,
             ProgressListener listener, int[] completed, int total) throws IOException {
-        MessageDigest digest = smsKeyDigest();
+        MessageDigest digest = keyDigest();
         reader.beginObject();
         while (reader.hasNext()) {
             String name = reader.nextName();
@@ -580,7 +687,11 @@ public final class RestoreEngine {
                     reader.endObject();
                     String body = firstString(row, "body", "text", "message", "content");
                     String address = firstString(row, "address", "remote_uri", "from", "to", "number");
-                    if (body == null || address == null) { result.failed++; continue; }
+                    if (body == null || address == null) {
+                        result.failed++;
+                        reportProgress(listener, ++completed[0], total);
+                        continue;
+                    }
                     ContentValues sms = new ContentValues();
                     sms.put("address", address);
                     sms.put("body", body);
@@ -592,13 +703,20 @@ public final class RestoreEngine {
                     sms.put("read", row.getAsInteger("read") == null ? 1 : row.getAsInteger("read"));
                     sms.put("seen", row.getAsInteger("seen") == null ? 1 : row.getAsInteger("seen"));
                     sms.put("type", row.getAsInteger("type") == null ? Telephony.Sms.MESSAGE_TYPE_INBOX : row.getAsInteger("type"));
-                    attachThreadId(resolver, sms, threadIds);
                     String key = keyFor(sms, true, digest);
-                    if (existingSms.contains(key)) { result.duplicates++; continue; }
-                    try {
-                        if (resolver.insert(Telephony.Sms.CONTENT_URI, sms) == null) throw new SecurityException("provider rejected RCS fallback");
-                        existingSms.add(key); result.rcsAdded++;
-                    } catch (Exception error) { result.failed++; }
+                    if (index.contains(SMS_INDEX, key)) {
+                        result.duplicates++;
+                    } else {
+                        attachThreadId(resolver, sms, threadIds);
+                        boolean inserted = false;
+                        try {
+                            inserted = resolver.insert(Telephony.Sms.CONTENT_URI, sms) != null;
+                        } catch (Exception ignored) { }
+                        if (inserted) {
+                            index.add(SMS_INDEX, key);
+                            result.rcsAdded++;
+                        } else result.failed++;
+                    }
                     reportProgress(listener, ++completed[0], total);
                 }
                 reader.endArray();
@@ -619,26 +737,30 @@ public final class RestoreEngine {
         if (listener != null) listener.onProgress(completed, total);
     }
 
-    private static Map<String, Integer> existingMmsKeys(ContentResolver resolver) throws IOException {
-        Map<String, Integer> keys = new HashMap<>();
-        try (Cursor cursor = resolver.query(Telephony.Mms.CONTENT_URI, MMS_KEY_COLUMNS, null, null, null)) {
+    private static void seedExistingMmsKeys(RestoreIndex index, ContentResolver resolver) throws IOException {
+        MessageDigest digest = keyDigest();
+        String[] columns = Arrays.copyOf(MMS_KEY_COLUMNS, MMS_KEY_COLUMNS.length + 1);
+        columns[MMS_KEY_COLUMNS.length] = "_id";
+        try (Cursor cursor = resolver.query(Telephony.Mms.CONTENT_URI, columns, null, null, null)) {
             if (cursor == null) throw new IOException("MMS provider unavailable");
             while (cursor.moveToNext()) {
                 StringBuilder key = new StringBuilder();
-                for (int i = 0; i < cursor.getColumnCount(); i++) key.append(cursor.isNull(i) ? "<null>" : cursor.getString(i)).append('\u001f');
-                keys.merge(key.toString(), 1, Integer::sum);
+                for (int i = 0; i < MMS_KEY_COLUMNS.length; i++) {
+                    appendKeyField(key, cursor.isNull(i) ? null : cursor.getString(i));
+                }
+                String header = compactKey(key, digest);
+                index.addMmsCandidate(header, cursor.getLong(MMS_KEY_COLUMNS.length));
+                index.add(MMS_HEADER_INDEX, header);
             }
         } catch (SecurityException | IllegalArgumentException e) {
             throw new IOException("MMS provider unavailable", e);
         }
-        return keys;
     }
 
     private static String mmsKey(ContentValues values) {
         StringBuilder key = new StringBuilder();
-        for (String name : MMS_KEY_COLUMNS)
-            key.append(values.getAsString(name) == null ? "<null>" : values.getAsString(name)).append('\u001f');
-        return key.toString();
+        for (String name : MMS_KEY_COLUMNS) appendKeyField(key, values.getAsString(name));
+        return compactKey(key, keyDigest());
     }
 
     private static final class MmsPart {
@@ -647,10 +769,9 @@ public final class RestoreEngine {
         MmsPart(ContentValues values, String dataRange) { this.values = values; this.dataRange = dataRange; }
     }
 
-    private static Set<String> existingKeys(ContentResolver resolver, Uri uri, String[] columns,
-            long minDate, long maxDate, boolean sms) throws IOException {
-        Set<String> keys = new HashSet<>();
-        MessageDigest digest = sms ? smsKeyDigest() : null;
+    private static void seedExistingKeys(RestoreIndex index, int scope, ContentResolver resolver, Uri uri,
+            String[] columns, long minDate, long maxDate) throws IOException {
+        MessageDigest digest = keyDigest();
         String selection = minDate != Long.MAX_VALUE && maxDate != Long.MIN_VALUE
                 ? "date >= ? AND date <= ?" : null;
         String[] selectionArgs = selection == null ? null
@@ -660,37 +781,37 @@ public final class RestoreEngine {
             while (cursor.moveToNext()) {
                 StringBuilder key = new StringBuilder();
                 for (String column : columns) {
-                    int index = cursor.getColumnIndex(column);
-                    if (index < 0 || cursor.isNull(index)) key.append("<null>");
-                    else key.append(cursor.getString(index));
-                    key.append('\u001f');
+                    int position = cursor.getColumnIndex(column);
+                    appendKeyField(key, position < 0 || cursor.isNull(position) ? null : cursor.getString(position));
                 }
-                keys.add(compactKey(key, digest));
+                index.add(scope, compactKey(key, digest));
             }
         } catch (SecurityException e) {
             throw new IOException("read permission required", e);
         }
-        return keys;
     }
 
     private static String keyFor(ContentValues values, boolean sms, MessageDigest digest) {
         String[] columns = sms ? SMS_KEY_COLUMNS : CALL_KEY_COLUMNS;
         StringBuilder key = new StringBuilder();
         for (String column : columns) {
-            String value = values.getAsString(column);
-            key.append(value == null ? "<null>" : value).append('\u001f');
+            appendKeyField(key, values.getAsString(column));
         }
         return compactKey(key, digest);
+    }
+
+    private static void appendKeyField(StringBuilder key, String value) {
+        if (value == null) key.append("-:");
+        else key.append(value.length()).append(':').append(value);
     }
 
     // Don't keep a second copy of every SMS body in memory during large restores.
     private static String compactKey(StringBuilder key, MessageDigest digest) {
         String value = key.toString();
-        if (digest == null) return value;
         return Base64.encodeToString(digest.digest(value.getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP);
     }
 
-    private static MessageDigest smsKeyDigest() {
+    private static MessageDigest keyDigest() {
         try {
             return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException impossible) {
@@ -700,10 +821,6 @@ public final class RestoreEngine {
 
     private static long parseLong(String value) {
         try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return 0L; }
-    }
-
-    private static Long parseDate(String value) {
-        try { return Long.parseLong(value); } catch (NumberFormatException ignored) { return null; }
     }
 
     public static final class RestoreSummary {
