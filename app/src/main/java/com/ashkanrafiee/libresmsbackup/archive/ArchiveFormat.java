@@ -427,6 +427,8 @@ public final class ArchiveFormat {
                 boolean saved = id >= 0 && !cursor.isNull(id) && writeProviderData(context, json, payload,
                         Uri.parse("content://mms/part/" + cursor.getLong(id)), metadata);
                 if (!saved && !savedInline) {
+                    metadata.add(",\"attachmentOmitted\":true".length());
+                    json.name("attachmentOmitted").value(true);
                     attachments.omitted++;
                 }
                 json.endObject();

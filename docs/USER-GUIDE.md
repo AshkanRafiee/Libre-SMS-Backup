@@ -17,7 +17,7 @@
 
 Choose a daily, weekly, or monthly schedule. Each run uses your current content and encryption settings. Android's **Alarms & reminders** access can help backups run at the chosen time. Battery and background restrictions can delay or skip a run. Optional notifications show what each scheduled backup saved.
 
-Allow notifications for Libre SMS Backup in Android settings to see scheduled failures and attachment omissions without opening the app. You can also see the latest backup result on the app’s home screen.
+Allow notifications for Libre SMS Backup and keep its **Automatic backups** notification category enabled in Android settings to see scheduled failures and attachment omissions without opening the app. You can also see the latest backup result on the app’s home screen.
 
 Selecting **Restricted messages** turns off scheduled backups. When you deselect it, the app can restore the previous schedule. Check the next run after changing this setting or moving the backup folder.
 

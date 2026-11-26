@@ -13,6 +13,8 @@ import android.os.ParcelFileDescriptor;
 
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import com.ashkanrafiee.libresmsbackup.data.RestoreEngine;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -157,6 +159,20 @@ public class ArchiveWriteLimitsTest extends TestCase {
         }
     }
 
+    public void testUnreadableFileBackedInlineMmsIsNotRestoredAsBlankText() throws Exception {
+        if (context == null) return;
+        provider.mms = true;
+        provider.parts = row(new String[]{"_id", "ct", "text", "_data"}, 2L, "text/plain", "", "provider-file");
+        assertEquals(1, create().omittedAttachments);
+        try (ArchiveFormat.PreparedRestore prepared =
+                     ArchiveFormat.prepareRestore(context, DESTINATION, new char[0])) {
+            RestoreEngine.RestoreSummary restored = prepared.restore(context, true, false);
+            assertEquals(0, restored.mmsAdded);
+            assertEquals(1, restored.failed);
+            assertEquals(0, provider.inserts);
+        }
+    }
+
     public void testEncryptedAttachmentPaddingAndMissingValues() throws Exception {
         if (context == null) return;
         provider.mms = true;
@@ -250,6 +266,7 @@ public class ArchiveWriteLimitsTest extends TestCase {
         boolean mms;
         boolean conversation;
         boolean rcs;
+        int inserts;
 
         @Override public boolean onCreate() { return true; }
 
@@ -258,6 +275,7 @@ public class ArchiveWriteLimitsTest extends TestCase {
             switch (uri.toString()) {
                 case "content://sms": return sms == null ? new MatrixCursor(new String[]{"body"}) : sms;
                 case "content://mms":
+                    if (projection != null) return new MatrixCursor(projection);
                     if (!mms) return null;
                     return conversation ? row(new String[]{"_id", "thread_id"}, 1L, 99L)
                             : row(new String[]{"_id"}, 1L);
@@ -286,7 +304,10 @@ public class ArchiveWriteLimitsTest extends TestCase {
         }
 
         @Override public String getType(Uri uri) { return null; }
-        @Override public Uri insert(Uri uri, ContentValues values) { throw new UnsupportedOperationException(); }
+        @Override public Uri insert(Uri uri, ContentValues values) {
+            inserts++;
+            throw new UnsupportedOperationException();
+        }
         @Override public int update(Uri uri, ContentValues values, String selection, String[] args) {
             throw new UnsupportedOperationException();
         }

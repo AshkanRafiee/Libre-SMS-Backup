@@ -313,6 +313,7 @@ public final class RestoreEngine {
             while (reader.hasNext()) {
                 String field = reader.nextName();
                 if ("row".equals(field)) inspectRecord(reader, false);
+                else if (attachments != null && "attachmentOmitted".equals(field)) reader.nextBoolean();
                 else if (attachments != null && "dataBase64".equals(field)) {
                     if (seenAttachment) throw new IOException("duplicate MMS attachment");
                     seenAttachment = true;
@@ -538,7 +539,8 @@ public final class RestoreEngine {
         }
         reader.endObject();
         for (MmsPart part : parts) {
-            if (part.dataRange == null && MmsIdentity.requiresAttachment(part.values)) {
+            if (part.omitted || (part.dataRange == null && (MmsIdentity.requiresAttachment(part.values)
+                    || part.values.get("text") == null))) {
                 result.failed++;
                 return;
             }
@@ -695,15 +697,17 @@ public final class RestoreEngine {
         while (reader.hasNext()) {
             ContentValues values = new ContentValues();
             String data = null;
+            boolean omitted = false;
             reader.beginObject();
             while (reader.hasNext()) {
                 String name = reader.nextName();
                 if ("row".equals(name)) values.putAll(readRecord(reader, false));
                 else if ("dataBase64".equals(name)) data = reader.nextString();
+                else if ("attachmentOmitted".equals(name)) omitted |= reader.nextBoolean();
                 else reader.skipValue();
             }
             reader.endObject();
-            parts.add(new MmsPart(values, data));
+            parts.add(new MmsPart(values, data, omitted));
         }
         reader.endArray();
     }
@@ -881,7 +885,12 @@ public final class RestoreEngine {
     private static final class MmsPart {
         final ContentValues values;
         final String dataRange;
-        MmsPart(ContentValues values, String dataRange) { this.values = values; this.dataRange = dataRange; }
+        final boolean omitted;
+        MmsPart(ContentValues values, String dataRange, boolean omitted) {
+            this.values = values;
+            this.dataRange = dataRange;
+            this.omitted = omitted;
+        }
     }
 
     private static void seedExistingKeys(RestoreIndex index, int scope, ContentResolver resolver, Uri uri,
