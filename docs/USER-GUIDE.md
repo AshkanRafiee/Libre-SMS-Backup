@@ -35,7 +35,7 @@ Very large backups can exceed the app's size limit. The memory available to the 
 2. Install Libre SMS Backup on the destination phone, open **Restore from backup**, and choose the archive. Enter its password if prompted. The app authenticates an encrypted archive before writing records and warns you if the archive is not encrypted.
 3. Review the preview and choose messages, calls, or both. Android may require the default SMS role for message restore and write access for restoring call logs. Matching records are skipped; check the final summary for anything that could not be restored.
 
-Some older backups do not contain enough information to recreate incoming MMS group conversations on the new phone. An MMS with missing attachment data is reported as unrestored. Keep the original archive if those messages do not appear in your messaging app.
+An MMS is reported as unrestored if its attachment data is missing or its incoming group conversation cannot be recreated. Backups can preserve group conversation information when the source phone makes it available. Keep the original archive if any messages could not be restored.
 
 **Switch back to your regular SMS app when done.** Libre SMS Backup does not handle incoming MMS while it is the default SMS app. Avoid the temporary switch when you're expecting MMS. The app guides you back to Android's default-app settings.
 
