@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /** Restores an already authenticated archive without parsing the complete payload into memory. */
@@ -42,7 +43,6 @@ public final class RestoreEngine {
     private static final int MMS_FROM = 137;
     private static final int MMS_TO = 151;
     private static final int MMS_CC = 130;
-    private static final int MMS_SEND_REQUEST = 128;
     private static final int SMS_INDEX = 1;
     private static final int CALL_INDEX = 2;
     private static final int MMS_INDEX = 3;
@@ -221,14 +221,18 @@ public final class RestoreEngine {
 
     private static Long inspectRecord(JsonReader reader, boolean sms) throws IOException {
         Long date = null;
+        Set<String> columns = new HashSet<>();
         reader.beginObject();
         while (reader.hasNext()) {
-            String name = reader.nextName();
+            String name = normalizedColumnName(reader.nextName());
             JsonToken token = reader.peek();
-            if (token == JsonToken.NULL || !isSafeColumnName(name) || isNonPortableColumn(name)
-                    || (sms && !isRestorableSmsColumn(name))) {
+            if (name == null || isNonPortableColumn(name) || (sms && !isRestorableSmsColumn(name))) {
                 reader.skipValue();
-            } else if (token == JsonToken.BEGIN_OBJECT) {
+                continue;
+            }
+            if (!columns.add(name)) throw new IOException("duplicate backup column");
+            if (token == JsonToken.NULL) reader.nextNull();
+            else if (token == JsonToken.BEGIN_OBJECT) {
                 // Match the importer's provider-blob handling without keeping the rest of the row.
                 ContentValues blob = new ContentValues(1);
                 readEncodedValue(reader, blob, name);
@@ -373,10 +377,10 @@ public final class RestoreEngine {
         ContentValues values = new ContentValues();
         reader.beginObject();
         while (reader.hasNext()) {
-            String name = reader.nextName();
+            String name = normalizedColumnName(reader.nextName());
             if (reader.peek() == JsonToken.NULL) { reader.nextNull(); continue; }
             // Provider IDs and thread IDs are local to a device and must never be restored.
-            if (!isSafeColumnName(name) || isNonPortableColumn(name) || (sms && !isRestorableSmsColumn(name))) {
+            if (name == null || isNonPortableColumn(name) || (sms && !isRestorableSmsColumn(name))) {
                 reader.skipValue();
             } else if (reader.peek() == JsonToken.BEGIN_OBJECT) {
                 readEncodedValue(reader, values, name);
@@ -396,15 +400,15 @@ public final class RestoreEngine {
     }
 
     /** Provider values are bound, but some provider implementations append column names to SQL. */
-    public static boolean isSafeColumnName(String name) {
-        if (name.isEmpty()) return false;
+    public static String normalizedColumnName(String name) {
+        if (name.isEmpty()) return null;
         for (int i = 0; i < name.length(); i++) {
             char c = name.charAt(i);
             if (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
                     || (i > 0 && c >= '0' && c <= '9')) continue;
-            return false;
+            return null;
         }
-        return true;
+        return name.toLowerCase(Locale.ROOT);
     }
 
     private static void readEncodedValue(JsonReader reader, ContentValues values, String name) throws IOException {
@@ -551,14 +555,13 @@ public final class RestoreEngine {
             return;
         }
         Uri inserted = null;
+        boolean linkingReports = false;
         try {
             attachMmsThread(context, message, addresses, threadRecipients);
-            // Deleting a Send.req can also delete reports linked to its message ID. Keep that
-            // ID unset until every child write succeeds so rollback cannot remove other rows.
-            Integer kind = message.getAsInteger(Telephony.Mms.MESSAGE_TYPE);
-            String reportId = kind != null && kind == MMS_SEND_REQUEST
-                    ? message.getAsString(Telephony.Mms.MESSAGE_ID) : null;
-            if (reportId != null) message.remove(Telephony.Mms.MESSAGE_ID);
+            // Deleting a Send.req can also delete reports linked to its message ID. Delay setting
+            // the ID for every PDU; the provider may interpret the PDU type differently from Java.
+            String reportId = message.getAsString(Telephony.Mms.MESSAGE_ID);
+            message.remove(Telephony.Mms.MESSAGE_ID);
             inserted = resolver.insert(Telephony.Mms.CONTENT_URI, message);
             if (inserted == null) throw new SecurityException("provider rejected MMS");
             String id = inserted.getLastPathSegment();
@@ -581,14 +584,18 @@ public final class RestoreEngine {
             if (reportId != null) {
                 ContentValues reportLink = new ContentValues(1);
                 reportLink.put(Telephony.Mms.MESSAGE_ID, reportId);
-                Uri completeMessage = inserted;
-                inserted = null; // Once linking is attempted, rollback is no longer safe.
-                if (resolver.update(completeMessage, reportLink, null, null) != 1)
+                linkingReports = true;
+                if (resolver.update(inserted, reportLink, null, null) != 1)
                     throw new IOException("could not link MMS reports");
             }
             result.mmsAdded++;
         } catch (Exception error) {
-            if (inserted != null) try { resolver.delete(inserted, null, null); } catch (Exception ignored) { }
+            if (inserted != null) {
+                try {
+                    // A provider may have committed the link before returning an error.
+                    resolver.delete(inserted, linkingReports ? Telephony.Mms.MESSAGE_ID + " IS NULL" : null, null);
+                } catch (Exception ignored) { }
+            }
             result.failed++;
         }
     }

@@ -119,6 +119,7 @@ public class RestoreEngineTest extends TestCase {
         String[] malformedSections = {
                 "\"sms\":[{\"body\":[]}]",
                 "\"calls\":[{\"duration\":true}]",
+                "\"calls\":[{\"duration\":1,\"DURATION\":2}]",
                 "\"sms\":[{\"body\":\"earlier\"}],\"sms\":[]",
                 "\"rcs\":{\"chats\":[{\"row\":{}}],\"chats\":[]}",
                 "\"mms\":{\"messages\":[{}],\"messages\":[]}",
@@ -149,12 +150,12 @@ public class RestoreEngineTest extends TestCase {
     }
 
     public void testOnlySafeProviderColumnNamesAreAccepted() {
-        assertTrue(RestoreEngine.isSafeColumnName("vendor_123"));
-        assertTrue(RestoreEngine.isSafeColumnName("_id"));
-        assertFalse(RestoreEngine.isSafeColumnName("7foo"));
-        assertFalse(RestoreEngine.isSafeColumnName("two columns"));
-        assertFalse(RestoreEngine.isSafeColumnName("column)"));
-        assertFalse(RestoreEngine.isSafeColumnName(""));
+        assertEquals("vendor_123", RestoreEngine.normalizedColumnName("Vendor_123"));
+        assertEquals("_id", RestoreEngine.normalizedColumnName("_ID"));
+        assertNull(RestoreEngine.normalizedColumnName("7foo"));
+        assertNull(RestoreEngine.normalizedColumnName("two columns"));
+        assertNull(RestoreEngine.normalizedColumnName("column)"));
+        assertNull(RestoreEngine.normalizedColumnName(""));
     }
 
     public void testInspectAcceptsLegacyMetadataAndShuffledFields() throws Exception {

@@ -25,7 +25,9 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** Reads and writes the streaming JSON payload inside a Libre SMS Backup archive. */
 public final class ArchiveFormat {
@@ -195,15 +197,17 @@ public final class ArchiveFormat {
     private static void writeCursorRow(JsonWriter json, Cursor cursor, MmsMetadata metadata)
             throws IOException {
         int fields = 0;
+        Set<String> exported = new HashSet<>();
         int rowBytes = 2; // Row braces.
         if (metadata != null) metadata.add(rowBytes);
         json.beginObject();
-        for (String column : cursor.getColumnNames()) {
-            if (isNonPortableColumn(column) || !RestoreEngine.isSafeColumnName(column)) continue;
+        for (String providerColumn : cursor.getColumnNames()) {
+            String column = RestoreEngine.normalizedColumnName(providerColumn);
+            if (column == null || isNonPortableColumn(column) || !exported.add(column)) continue;
             if (++fields > MAX_OBJECT_FIELDS) throw new IOException("backup object has too many fields");
             int fieldBytes = jsonStringBytes(column) + (fields == 1 ? 1 : 2); // Colon and comma.
             json.name(column);
-            int index = cursor.getColumnIndex(column);
+            int index = cursor.getColumnIndex(providerColumn);
             int valueBytes;
             if (index < 0 || cursor.isNull(index)) {
                 json.nullValue();
@@ -477,19 +481,26 @@ public final class ArchiveFormat {
             return;
         }
         if (source == null) return;
-        try (InputStream input = source) {
-            File stage = File.createTempFile("libresmsbackup-part-", ".tmp", context.getCacheDir());
+        File stage = null;
+        boolean sourceClosed = false;
+        try {
+            stage = File.createTempFile("libresmsbackup-part-", ".tmp", context.getCacheDir());
             try (FileInputStream staged = new FileInputStream(stage)) {
+                boolean complete;
                 try (FileOutputStream output = new FileOutputStream(stage)) {
                     if (!stage.delete()) throw new IOException("cannot unlink backup attachment stage");
-                    if (!stageProviderData(input, output)) return;
+                    complete = stageProviderData(source, output);
                 }
+                sourceClosed = true;
+                try { source.close(); } catch (IOException unavailable) { return; }
+                if (!complete) return;
                 // The reader substitutes offset:length (at most two 19-digit numbers and a colon).
                 if (metadata != null) metadata.add(",\"dataBase64\":\"\"".length() + 2 * 19 + 1);
                 payload.writeAttachment(json, staged);
-            } finally {
-                stage.delete();
             }
+        } finally {
+            if (!sourceClosed) try { source.close(); } catch (IOException ignored) { }
+            if (stage != null) stage.delete();
         }
     }
 

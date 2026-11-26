@@ -138,6 +138,32 @@ public class LargeMmsRestoreTest extends TestCase {
         }
     }
 
+    public void testFailedReportLinkOnlyRollsBackAnUnlinkedMessage() throws Exception {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File archive = File.createTempFile("report-mms-", ".json", context.getCacheDir());
+        try (TestMmsProvider provider = new TestMmsProvider(context)) {
+            try (OutputStream output = new FileOutputStream(archive)) {
+                writeJson(output, MMS_START + MMS_END.replace("\"msg_box\":1",
+                        "\"msg_box\":2,\"m_type\":\"128.0\",\"M_ID\":\"report\""));
+            }
+            Context restoreContext = provider.wrap(context);
+            provider.rejectReportLink = true;
+            assertEquals(1, RestoreEngine.restore(restoreContext, archive, true, false).failed);
+            assertEquals(1, provider.deleteCount);
+            assertNull(provider.message);
+            provider.rejectReportLink = false;
+            provider.throwAfterLink = true;
+            assertEquals(1, RestoreEngine.restore(restoreContext, archive, true, false).failed);
+            assertEquals(1, provider.deleteCount);
+            assertEquals("report", provider.message.getAsString(Telephony.Mms.MESSAGE_ID));
+            assertEquals(1, RestoreEngine.restore(restoreContext, archive, true, false).duplicates);
+            assertEquals(1, provider.messages.size());
+        } finally {
+            archive.delete();
+        }
+    }
+
     public void testSameSecondMessagesCountSeparatelyAndDeduplicateOnRetry() throws Exception {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -320,6 +346,8 @@ public class LargeMmsRestoreTest extends TestCase {
         final List<ContentValues> messages = new ArrayList<>();
         ContentValues message;
         boolean rejectSecondPart;
+        boolean rejectReportLink;
+        boolean throwAfterLink;
         int partOpenCount;
         int deleteCount;
         String deletedReportId;
@@ -420,6 +448,10 @@ public class LargeMmsRestoreTest extends TestCase {
         @Override public int delete(Uri uri, String selection, String[] args) {
             assertEquals(MESSAGE_URI, uri);
             assertNotNull(message);
+            if (selection != null) {
+                assertEquals("m_id IS NULL", selection);
+                if (message.getAsString(Telephony.Mms.MESSAGE_ID) != null) return 0;
+            }
             deletedReportId = message.getAsString(Telephony.Mms.MESSAGE_ID);
             deleteCount++;
             removePartFiles();
@@ -442,7 +474,9 @@ public class LargeMmsRestoreTest extends TestCase {
         @Override public String getType(Uri uri) { throw new UnsupportedOperationException(); }
         @Override public int update(Uri uri, ContentValues values, String selection, String[] args) {
             assertEquals(MESSAGE_URI, uri);
+            if (rejectReportLink) return 0;
             message.putAll(values);
+            if (throwAfterLink) throw new IllegalStateException("test link was written");
             return 1;
         }
     }
