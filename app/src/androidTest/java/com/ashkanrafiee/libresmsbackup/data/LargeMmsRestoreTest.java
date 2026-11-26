@@ -183,6 +183,26 @@ public class LargeMmsRestoreTest extends TestCase {
         }
     }
 
+    public void testMissingBinaryAttachmentDoesNotCreateIncompleteMessagesOnRetry() throws Exception {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File archive = File.createTempFile("missing-mms-part-", ".json", context.getCacheDir());
+        try (TestMmsProvider provider = new TestMmsProvider(context)) {
+            try (OutputStream output = new FileOutputStream(archive)) {
+                writeJson(output, MMS_START + "{\"row\":{\"ct\":\"image/jpeg\"}}" + MMS_END);
+            }
+            Context restoreContext = provider.wrap(context);
+            for (int attempt = 0; attempt < 2; attempt++) {
+                RestoreEngine.RestoreSummary result = RestoreEngine.restore(restoreContext, archive, true, false);
+                assertEquals(1, result.failed);
+                assertEquals(0, result.mmsAdded);
+                assertTrue(provider.messages.isEmpty());
+            }
+        } finally {
+            archive.delete();
+        }
+    }
+
     public void testLegacyIncomingGroupDoesNotGetSenderOnlyThread() throws Exception {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();

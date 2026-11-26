@@ -486,6 +486,12 @@ public final class RestoreEngine {
             else reader.skipValue();
         }
         reader.endObject();
+        for (MmsPart part : parts) {
+            if (part.dataRange == null && MmsIdentity.requiresAttachment(part.values)) {
+                result.failed++;
+                return;
+            }
+        }
         if (dateMs != null) message.put("date", dateMs / 1000L);
         if (message.containsKey("ct")) {
             if (!message.containsKey(Telephony.Mms.CONTENT_TYPE))

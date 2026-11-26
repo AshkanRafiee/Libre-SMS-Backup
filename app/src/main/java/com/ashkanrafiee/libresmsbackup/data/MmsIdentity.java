@@ -36,13 +36,17 @@ final class MmsIdentity {
 
     /** Pass null for absent data, or the SHA-256 key of the decoded bytes, including zero bytes. */
     void addPart(ContentValues values, String binaryDigest) {
-        if (binaryDigest == null && !storesInline(values.getAsString("ct"))) {
+        if (binaryDigest == null && requiresAttachment(values)) {
             complete = false;
             return;
         }
         MessageDigest digest = rowDigest(values, PART_COLUMNS);
         updateString(digest, binaryDigest);
         parts.add(digestKey(digest));
+    }
+
+    static boolean requiresAttachment(ContentValues part) {
+        return !storesInline(part.getAsString("ct"));
     }
 
     /** Returns null if the archive does not contain all bytes required to identify this MMS. */
