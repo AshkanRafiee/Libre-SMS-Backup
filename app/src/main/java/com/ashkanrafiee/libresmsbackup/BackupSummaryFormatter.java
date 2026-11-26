@@ -15,7 +15,8 @@ final class BackupSummaryFormatter {
     }
 
     static String omittedAttachments(Context context, int count) {
-        return context.getResources().getQuantityString(R.plurals.backup_omitted_attachments, count, count);
+        String warning = context.getResources().getQuantityString(R.plurals.backup_omitted_attachments, count, count);
+        return context.getString(R.string.backup_omission_detail, warning);
     }
 
     static String format(Context context, int smsCount, int callCount, int mmsCount, int rcsCount) {

@@ -94,6 +94,7 @@
     <string name="backup_choose_content">اختر أولًا رسائل SMS أو سجلات المكالمات لنسخها.</string>
     <string name="notice_backup_complete_title">اكتملت النسخة الاحتياطية</string>
     <string name="backup_saved_with_omissions">حُفظت النسخة الاحتياطية من دون بعض المرفقات</string>
+    <string name="backup_omission_detail">%1$s قد يتعذّر استعادة رسائل MMS ذات المرفقات المفقودة.</string>
     <plurals name="backup_omitted_attachments">
         <item quantity="zero">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>
         <item quantity="one">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>

@@ -94,6 +94,7 @@
     <string name="backup_choose_content">Wählen Sie zuerst SMS-Nachrichten oder Anruflisten aus.</string>
     <string name="notice_backup_complete_title">Sicherung abgeschlossen</string>
     <string name="backup_saved_with_omissions">Backup ohne einige Anhänge gespeichert</string>
+    <string name="backup_omission_detail">%1$s MMS mit fehlenden Anhängen lassen sich möglicherweise nicht wiederherstellen.</string>
     <plurals name="backup_omitted_attachments">
         <item quantity="one">%d Anhang war zu groß oder konnte nicht gelesen werden und fehlt im Backup.</item>
         <item quantity="other">%d Anhänge waren zu groß oder konnten nicht gelesen werden und fehlen im Backup.</item>

@@ -94,6 +94,7 @@
     <string name="backup_choose_content">Sélectionnez d’abord les SMS ou les journaux d’appels à sauvegarder.</string>
     <string name="notice_backup_complete_title">Sauvegarde terminée</string>
     <string name="backup_saved_with_omissions">Sauvegarde enregistrée sans certaines pièces jointes</string>
+    <string name="backup_omission_detail">%1$s Les MMS dont il manque des pièces jointes peuvent ne pas être restaurés.</string>
     <plurals name="backup_omitted_attachments">
         <item quantity="one">%d pièce jointe a été omise car elle était trop volumineuse ou illisible.</item>
         <item quantity="other">%d pièces jointes ont été omises car elles étaient trop volumineuses ou illisibles.</item>

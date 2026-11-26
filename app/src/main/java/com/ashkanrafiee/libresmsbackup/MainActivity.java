@@ -241,7 +241,6 @@ public class MainActivity extends Activity {
         status.setPadding(0, dp(5), 0, dp(2)); status.setMaxLines(1);
         status.setEllipsize(TextUtils.TruncateAt.END); words.addView(status);
         statusDetail = text("", 12, color(R.color.subtitle));
-        statusDetail.setMaxLines(3); statusDetail.setEllipsize(TextUtils.TruncateAt.END);
         statusDetail.setPadding(0, dp(1), 0, dp(2)); statusDetail.setVisibility(View.GONE);
         words.addView(statusDetail);
         progress = new ProgressBar(this); progress.setIndeterminate(true); progress.setVisibility(View.GONE);
@@ -1265,11 +1264,11 @@ public class MainActivity extends Activity {
                         BackupOptions.encrypted(this), BackupOptions.includeSms(this), BackupOptions.includeCalls(this),
                         BackupOptions.includeRestrictedMessages(this));
                 destination[0] = ScheduleManager.publishBackupFile(this, destination[0]);
-                try { ScheduleManager.prune(this); } catch (Exception ignored) { }
                 ScheduleManager.prefs(this).edit()
                         .putLong("manual_last_success", System.currentTimeMillis())
                         .putInt("manual_last_omitted_attachments", summary.omittedAttachments)
                         .remove("manual_last_error").apply();
+                try { ScheduleManager.prune(this); } catch (Exception ignored) { }
                 runOnUiThread(() -> {
                     String completed = BackupSummaryFormatter.format(this, summary);
                     setBusy(false, completed);

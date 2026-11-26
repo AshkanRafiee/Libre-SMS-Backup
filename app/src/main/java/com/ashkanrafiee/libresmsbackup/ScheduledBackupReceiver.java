@@ -116,9 +116,9 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
                 }
                 destination = ScheduleManager.publishBackupFile(context, destination);
                 published = true;
+                recordSuccess(context, summary);
                 if (cancelled(context)) return;
                 try { ScheduleManager.prune(context); } catch (Exception ignored) { }
-                recordSuccess(context, summary);
             }
         } catch (Exception error) {
             if (!published) deleteDestination(context, destination);

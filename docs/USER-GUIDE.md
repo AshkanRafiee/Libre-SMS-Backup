@@ -8,7 +8,7 @@
 
 ### What gets saved
 
-- **Messages:** SMS and any MMS the device exposes. Attachments larger than 64 MiB or that the app cannot read are left out. The backup result shows how many attachments were left out.
+- **Messages:** SMS and any MMS the device exposes. Attachments the device lists but the app cannot read, or that are larger than 64 MiB, are left out and counted in the backup result. MMS with missing attachments may not restore. The app cannot count attachments the device does not list.
 - **Call logs:** Call-history entries, not audio recordings.
 - **RCS:** Only records exposed by a compatible provider. This is not a full backup of your messaging app. Compatible RCS text can be restored **as SMS**, not as native RCS conversations; RCS attachments are not restored.
 - **Restricted messages:** Android may hide some messages unless the backup app temporarily holds the default SMS role. This is a separate option for manual backups, not a guarantee that all RCS records are readable.

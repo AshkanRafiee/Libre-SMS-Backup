@@ -133,6 +133,7 @@
     <string name="notice_backup_complete_title">Backup complete</string>
     <string name="backup_saved_with_omissions">Backup saved without some attachments</string>
     <string name="backup_summary_with_warning" translatable="false">%1$s\n%2$s</string>
+    <string name="backup_omission_detail">%1$s MMS with missing attachments may not restore.</string>
     <plurals name="backup_omitted_attachments">
         <item quantity="one">%d attachment was too large or could not be read and was left out.</item>
         <item quantity="other">%d attachments were too large or could not be read and were left out.</item>

@@ -98,6 +98,7 @@
     <string name="backup_choose_content">Önce yedeklenecek SMS mesajlarını veya arama kayıtlarını seçin.</string>
     <string name="notice_backup_complete_title">Yedekleme tamamlandı</string>
     <string name="backup_saved_with_omissions">Yedek bazı ekler olmadan kaydedildi</string>
+    <string name="backup_omission_detail">%1$s Ekleri eksik MMS iletileri geri yüklenemeyebilir.</string>
     <plurals name="backup_omitted_attachments">
         <item quantity="one">%d ek çok büyük olduğu veya okunamadığı için yedeğe alınmadı.</item>
         <item quantity="other">%d ek çok büyük olduğu veya okunamadığı için yedeğe alınmadı.</item>

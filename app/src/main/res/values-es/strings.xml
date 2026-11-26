@@ -94,6 +94,7 @@
     <string name="backup_choose_content">Elige primero los SMS o registros de llamadas que quieres guardar.</string>
     <string name="notice_backup_complete_title">Copia de seguridad completada</string>
     <string name="backup_saved_with_omissions">Copia guardada sin algunos archivos adjuntos</string>
+    <string name="backup_omission_detail">%1$s Es posible que no se puedan restaurar los MMS con archivos adjuntos que falten.</string>
     <plurals name="backup_omitted_attachments">
         <item quantity="one">Se omitió %d archivo adjunto porque era demasiado grande o no se pudo leer.</item>
         <item quantity="other">Se omitieron %d archivos adjuntos porque eran demasiado grandes o no se pudieron leer.</item>

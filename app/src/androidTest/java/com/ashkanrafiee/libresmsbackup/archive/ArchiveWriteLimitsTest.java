@@ -127,13 +127,15 @@ public class ArchiveWriteLimitsTest extends TestCase {
         try (RandomAccessFile file = new RandomAccessFile(provider.attachment, "rw")) {
             file.setLength(64L * 1024 * 1024 + 1);
         }
-        MatrixCursor parts = new MatrixCursor(new String[]{"_id", "ct", "text"});
-        parts.addRow(new Object[]{1L, "image/png", null});
-        parts.addRow(new Object[]{2L, "text/plain", "Inline text"});
-        parts.addRow(new Object[]{3L, "image/jpeg", null});
+        MatrixCursor parts = new MatrixCursor(new String[]{"_id", "ct", "text", "_data"});
+        parts.addRow(new Object[]{1L, "image/png", null, null});
+        parts.addRow(new Object[]{2L, "text/plain", "", null});
+        parts.addRow(new Object[]{3L, "image/jpeg", null, null});
+        parts.addRow(new Object[]{4L, "text/plain", null, null});
+        parts.addRow(new Object[]{5L, "text/plain", "", "attachment"});
         provider.parts = parts;
         summary = create();
-        assertEquals(2, summary.omittedAttachments);
+        assertEquals(4, summary.omittedAttachments);
         try (ArchiveFormat.PreparedRestore prepared =
                      ArchiveFormat.prepareRestore(context, DESTINATION, new char[0])) {
             assertEquals(1, prepared.summary.mmsCount);

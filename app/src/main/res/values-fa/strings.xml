@@ -94,6 +94,7 @@
     <string name="backup_choose_content">ابتدا پیامک‌ها یا گزارش تماس‌ها را برای پشتیبان‌گیری انتخاب کنید.</string>
     <string name="notice_backup_complete_title">پشتیبان‌گیری کامل شد</string>
     <string name="backup_saved_with_omissions">پشتیبان بدون برخی پیوست‌ها ذخیره شد</string>
+    <string name="backup_omission_detail">%1$s پیام‌های چندرسانه‌ای که پیوستشان ذخیره نشده ممکن است بازیابی نشوند.</string>
     <plurals name="backup_omitted_attachments">
         <item quantity="one">%d پیوست به دلیل حجم زیاد یا خوانده نشدن، در پشتیبان ذخیره نشد.</item>
         <item quantity="other">%d پیوست به دلیل حجم زیاد یا خوانده نشدن، در پشتیبان ذخیره نشدند.</item>

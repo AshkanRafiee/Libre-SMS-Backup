@@ -421,9 +421,12 @@ public final class ArchiveFormat {
                 int id = cursor.getColumnIndex("_id");
                 int type = cursor.getColumnIndex("ct");
                 String contentType = type < 0 ? null : cursor.getString(type);
+                int text = cursor.getColumnIndex("text");
+                boolean savedInline = storesMmsPartInline(contentType)
+                        && text >= 0 && !cursor.isNull(text) && !hasExternalMmsData(cursor);
                 boolean saved = id >= 0 && !cursor.isNull(id) && writeProviderData(context, json, payload,
                         Uri.parse("content://mms/part/" + cursor.getLong(id)), metadata);
-                if (!saved && (!storesMmsPartInline(contentType) || hasExternalMmsData(cursor))) {
+                if (!saved && !savedInline) {
                     attachments.omitted++;
                 }
                 json.endObject();
