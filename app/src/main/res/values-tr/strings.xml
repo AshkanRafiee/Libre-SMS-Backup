@@ -97,6 +97,12 @@
     <string name="permission_denied">İzin verilmedi. Hiçbir şey okunmadı veya değiştirilmedi.</string>
     <string name="backup_choose_content">Önce yedeklenecek SMS mesajlarını veya arama kayıtlarını seçin.</string>
     <string name="notice_backup_complete_title">Yedekleme tamamlandı</string>
+    <string name="backup_saved_with_omissions">Yedek bazı ekler olmadan kaydedildi</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="one">%d ek çok büyük olduğu veya okunamadığı için yedeğe alınmadı.</item>
+        <item quantity="other">%d ek çok büyük olduğu veya okunamadığı için yedeğe alınmadı.</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">Bir kayıt güvenli şekilde yedeklenemeyecek kadar fazla veri içeriyor. Yeni yedek kaydedilmedi. Arama geçmişinize ihtiyacınız varsa aramaları ayrı yedeklemeyi deneyin.</string>
     <string name="notice_restore_complete_title">Geri yükleme tamamlandı</string>
     <string name="notice_failed_title">İşlem başarısız</string>
     <string name="backup_summary">%1$d SMS ve %2$d arama kaydı kaydedildi.</string>

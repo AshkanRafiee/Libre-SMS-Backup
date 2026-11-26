@@ -116,8 +116,24 @@ public class ArchiveWriteLimitsTest extends TestCase {
         try (RandomAccessFile file = new RandomAccessFile(provider.attachment, "rw")) {
             file.setLength(64L * 1024 * 1024);
         }
-        assertEquals(1, create().mmsCount);
+        ArchiveFormat.BackupSummary summary = create();
+        assertEquals(1, summary.mmsCount);
+        assertEquals(0, summary.omittedAttachments);
         assertTrue(provider.archive.length() > 85L * 1024 * 1024);
+        try (ArchiveFormat.PreparedRestore prepared =
+                     ArchiveFormat.prepareRestore(context, DESTINATION, new char[0])) {
+            assertEquals(1, prepared.summary.mmsCount);
+        }
+        try (RandomAccessFile file = new RandomAccessFile(provider.attachment, "rw")) {
+            file.setLength(64L * 1024 * 1024 + 1);
+        }
+        MatrixCursor parts = new MatrixCursor(new String[]{"_id", "ct", "text"});
+        parts.addRow(new Object[]{1L, "image/png", null});
+        parts.addRow(new Object[]{2L, "text/plain", "Inline text"});
+        parts.addRow(new Object[]{3L, "image/jpeg", null});
+        provider.parts = parts;
+        summary = create();
+        assertEquals(2, summary.omittedAttachments);
         try (ArchiveFormat.PreparedRestore prepared =
                      ArchiveFormat.prepareRestore(context, DESTINATION, new char[0])) {
             assertEquals(1, prepared.summary.mmsCount);
@@ -149,7 +165,9 @@ public class ArchiveWriteLimitsTest extends TestCase {
             parts.addRow(new Object[]{1L, "application/octet-stream"});
             parts.addRow(new Object[]{2L, "application/octet-stream"});
             provider.parts = parts;
-            ArchiveFormat.create(context, DESTINATION, "fixture-pass".toCharArray(), true, true, false);
+            ArchiveFormat.BackupSummary summary = ArchiveFormat.create(
+                    context, DESTINATION, "fixture-pass".toCharArray(), true, true, false);
+            assertEquals(1, summary.omittedAttachments);
             ByteArrayOutputStream plaintext = new ByteArrayOutputStream();
             try (FileInputStream input = new FileInputStream(provider.archive)) {
                 assertTrue(ArchiveCrypto.stagePayload(input, plaintext, "fixture-pass".toCharArray()));
@@ -158,6 +176,18 @@ public class ArchiveWriteLimitsTest extends TestCase {
             String value = bytes.length == 0 ? "" : "YWI=";
             assertTrue(json.contains("\"dataBase64\":\"" + value + "\""));
             assertEquals(json.indexOf("\"dataBase64\""), json.lastIndexOf("\"dataBase64\""));
+        }
+    }
+
+    public void testUnavailableRcsFileCountsAsOmittedAttachment() throws Exception {
+        if (context == null) return;
+        provider.rcs = true;
+        ArchiveFormat.BackupSummary summary = create();
+        assertEquals(1, summary.rcsCount);
+        assertEquals(1, summary.omittedAttachments);
+        try (ArchiveFormat.PreparedRestore prepared =
+                     ArchiveFormat.prepareRestore(context, DESTINATION, new char[0])) {
+            assertEquals(1, prepared.summary.rcsCount);
         }
     }
 
@@ -178,7 +208,7 @@ public class ArchiveWriteLimitsTest extends TestCase {
         try {
             create();
             fail("writer published an archive exceeding its restore limits");
-        } catch (IOException expected) {
+        } catch (ArchiveFormat.MetadataLimitException expected) {
             assertEquals(message, expected.getMessage());
         }
         assertTrue(Arrays.equals(original, Files.readAllBytes(provider.archive.toPath())));
@@ -217,6 +247,7 @@ public class ArchiveWriteLimitsTest extends TestCase {
         Cursor addresses;
         boolean mms;
         boolean conversation;
+        boolean rcs;
 
         @Override public boolean onCreate() { return true; }
 
@@ -234,6 +265,10 @@ public class ArchiveWriteLimitsTest extends TestCase {
                     return row(new String[]{"address"}, "2025550101");
                 case "content://mms-sms/canonical-address/101":
                     return row(new String[]{"address"}, "2025550102");
+                case "content://im/chat":
+                    return rcs ? row(new String[]{"body", "address"}, "RCS message", "2025550103") : null;
+                case "content://im/ft":
+                    return rcs ? row(new String[]{"_id"}, 1L) : null;
                 case "content://mms/1/part": return parts;
                 case "content://mms/1/addr":
                     return addresses == null ? new MatrixCursor(new String[]{"address"}) : addresses;

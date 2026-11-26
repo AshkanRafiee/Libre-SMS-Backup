@@ -93,6 +93,12 @@
     <string name="permission_denied">Berechtigung nicht erteilt. Nichts wurde gelesen oder geändert.</string>
     <string name="backup_choose_content">Wählen Sie zuerst SMS-Nachrichten oder Anruflisten aus.</string>
     <string name="notice_backup_complete_title">Sicherung abgeschlossen</string>
+    <string name="backup_saved_with_omissions">Backup ohne einige Anhänge gespeichert</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="one">%d Anhang war zu groß oder konnte nicht gelesen werden und fehlt im Backup.</item>
+        <item quantity="other">%d Anhänge waren zu groß oder konnten nicht gelesen werden und fehlen im Backup.</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">Ein Eintrag enthält zu viele Daten für ein sicheres Backup. Es wurde kein neues Backup gespeichert. Versuche bei Bedarf, die Anrufliste separat zu sichern.</string>
     <string name="notice_restore_complete_title">Wiederherstellung abgeschlossen</string>
     <string name="notice_failed_title">Vorgang fehlgeschlagen</string>
     <string name="backup_summary">%1$d SMS und %2$d Anruflisten gespeichert.</string>

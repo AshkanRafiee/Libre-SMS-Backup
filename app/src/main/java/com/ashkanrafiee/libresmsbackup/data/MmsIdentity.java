@@ -123,7 +123,7 @@ final class MmsIdentity {
     }
 
     private static boolean storesInline(String contentType) {
-        return "text/plain".equals(contentType) || "application/smil".equals(contentType);
+        return ArchiveFormat.storesMmsPartInline(contentType);
     }
 
     private static boolean hasPath(Cursor cursor, int dataColumn) {

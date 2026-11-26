@@ -1,6 +1,7 @@
 package com.ashkanrafiee.libresmsbackup;
 
 import android.Manifest;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -116,9 +117,8 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
                 destination = ScheduleManager.publishBackupFile(context, destination);
                 published = true;
                 if (cancelled(context)) return;
-                ScheduleManager.prune(context);
-                ScheduleManager.prefs(context).edit().putLong("last_success", System.currentTimeMillis()).remove("last_error").apply();
-                notifyUser(context, true, BackupSummaryFormatter.format(context, summary), null);
+                try { ScheduleManager.prune(context); } catch (Exception ignored) { }
+                recordSuccess(context, summary);
             }
         } catch (Exception error) {
             if (!published) deleteDestination(context, destination);
@@ -129,6 +129,8 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
                 boolean encrypted = ((ArchiveCrypto.PayloadTooLargeException) error).encrypted;
                 fail(context, context.getString(encrypted ? R.string.backup_error_encrypted_too_large
                         : R.string.backup_error_archive_too_large), ACTION_SCOPE);
+            } else if (error instanceof ArchiveFormat.MetadataLimitException) {
+                fail(context, context.getString(R.string.backup_error_metadata_limit), ACTION_SCOPE);
             } else {
                 String detail = error.getMessage();
                 String action = detail != null && (detail.contains("folder") || detail.contains("destination"))
@@ -151,24 +153,42 @@ public final class ScheduledBackupReceiver extends BroadcastReceiver {
 
     private static void fail(Context context, String message, String action) {
         ScheduleManager.prefs(context).edit().putString("last_error", message).apply();
-        notifyUser(context, false, message, action);
+        notifyUser(context, R.string.notification_backup_failed_title, message, action);
     }
 
-    private static void notifyUser(Context context, boolean success, String message, String action) {
+    private static void recordSuccess(Context context, ArchiveFormat.BackupSummary summary) {
+        ScheduleManager.prefs(context).edit().putLong("last_success", System.currentTimeMillis())
+                .putInt("last_omitted_attachments", summary.omittedAttachments).remove("last_error").apply();
+        int title = summary.omittedAttachments == 0
+                ? R.string.notification_backup_complete_title : R.string.backup_saved_with_omissions;
+        notifyUser(context, title, BackupSummaryFormatter.format(context, summary), null);
+    }
+
+    private static void notifyUser(Context context, int title, String message, String action) {
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
-        createChannel(context, manager);
-        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
+        try {
+            createChannel(context, manager);
+            if (!manager.areNotificationsEnabled()) return;
+            if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) return;
+            NotificationChannel channel = manager.getNotificationChannel(CHANNEL);
+            if (channel == null || channel.getImportance() == NotificationManager.IMPORTANCE_NONE) return;
+            manager.notify(NOTIFICATION_RESULT, buildResultNotification(context, title, message, action));
+        } catch (SecurityException ignored) {
+            // Notification permission may change while the job is finishing.
+        }
+    }
+
+    static Notification buildResultNotification(Context context, int title, String message, String action) {
         Intent open = new Intent(context, MainActivity.class);
         if (action != null) open.putExtra(EXTRA_NOTIFICATION_ACTION, action);
-        android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= 26
-                ? new android.app.Notification.Builder(context, CHANNEL)
-                : new android.app.Notification.Builder(context);
-        builder.setSmallIcon(R.drawable.ic_notification).setContentTitle(context.getString(success
-                ? R.string.notification_backup_complete_title : R.string.notification_backup_failed_title))
-                .setContentText(message).setAutoCancel(true).setContentIntent(PendingIntent.getActivity(context, NOTIFICATION_RESULT,
-                        open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
-        manager.notify(NOTIFICATION_RESULT, builder.build());
+        return new Notification.Builder(context, CHANNEL)
+                .setSmallIcon(R.drawable.ic_notification).setContentTitle(context.getString(title))
+                .setContentText(message).setStyle(new Notification.BigTextStyle().bigText(message))
+                .setAutoCancel(true).setContentIntent(PendingIntent.getActivity(context, NOTIFICATION_RESULT,
+                        open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
+                .build();
     }
 
     static void notifyExactAlarmNeeded(Context context) {

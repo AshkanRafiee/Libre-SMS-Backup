@@ -794,21 +794,26 @@ public class MainActivity extends Activity {
         long scheduledAttempt = prefs.getLong("last_attempt", 0);
         String scheduledError = prefs.getString("last_error", "");
         String manualError = prefs.getString("manual_last_error", "");
-        if (!scheduledError.isEmpty() && scheduledAttempt >= scheduledSuccess
-                && scheduledAttempt >= manualSuccess && scheduledAttempt > 0) {
+        long latestSuccess = Math.max(manualSuccess, scheduledSuccess);
+        boolean scheduledFailed = !scheduledError.isEmpty() && scheduledAttempt >= latestSuccess
+                && scheduledAttempt > 0;
+        boolean manualFailed = !manualError.isEmpty() && manualAttempt >= latestSuccess && manualAttempt > 0;
+        if (scheduledFailed && (!manualFailed || scheduledAttempt >= manualAttempt)) {
                     setStatus(getString(R.string.status_backup_failed, formatStatusTime(scheduledAttempt)),
                             getString(R.string.status_detail_error, getString(R.string.status_scheduled_backup), scheduledError));
-        } else if (!manualError.isEmpty() && manualAttempt >= manualSuccess
-                && manualAttempt >= scheduledSuccess && manualAttempt > 0) {
+        } else if (manualFailed) {
                     setStatus(getString(R.string.status_backup_failed, formatStatusTime(manualAttempt)),
                             getString(R.string.status_detail_error, getString(R.string.status_manual_backup), manualError));
         } else {
-            long latest = Math.max(manualSuccess, scheduledSuccess);
-            if (latest > 0) {
+            if (latestSuccess > 0) {
                 String source = scheduledSuccess >= manualSuccess
                         ? getString(R.string.status_scheduled_backup)
                         : getString(R.string.status_manual_backup);
-                setStatus(getString(R.string.status_last_backup, formatStatusTime(latest)), source);
+                int omitted = prefs.getInt(scheduledSuccess >= manualSuccess
+                        ? "last_omitted_attachments" : "manual_last_omitted_attachments", 0);
+                String detail = omitted == 0 ? source : getString(R.string.backup_summary_with_warning,
+                        BackupSummaryFormatter.omittedAttachments(this, omitted), source);
+                setStatus(getString(R.string.status_last_backup, formatStatusTime(latestSuccess)), detail);
             } else {
                 setStatus(getString(R.string.status_ready), null);
             }
@@ -1263,11 +1268,17 @@ public class MainActivity extends Activity {
                 try { ScheduleManager.prune(this); } catch (Exception ignored) { }
                 ScheduleManager.prefs(this).edit()
                         .putLong("manual_last_success", System.currentTimeMillis())
+                        .putInt("manual_last_omitted_attachments", summary.omittedAttachments)
                         .remove("manual_last_error").apply();
                 runOnUiThread(() -> {
                     String completed = BackupSummaryFormatter.format(this, summary);
                     setBusy(false, completed);
-                    Toast.makeText(this, getString(R.string.notice_backup_complete_title), Toast.LENGTH_SHORT).show();
+                    if (summary.omittedAttachments > 0) {
+                        setStatus(getString(R.string.backup_saved_with_omissions), completed);
+                    }
+                    Toast.makeText(this, getString(summary.omittedAttachments == 0
+                            ? R.string.notice_backup_complete_title : R.string.backup_saved_with_omissions),
+                            Toast.LENGTH_SHORT).show();
                     if (BackupOptions.includeRestrictedMessages(this)
                             && !RestoreSession.isSmsRestoreActive() && restrictedSmsRoleChangedByUs && isDefaultSmsApp()) {
                         SharedPreferences rolePrefs = getSharedPreferences(RESTORE_SMS_ROLE_PREFS, MODE_PRIVATE);
@@ -1287,6 +1298,8 @@ public class MainActivity extends Activity {
                     boolean encrypted = ((ArchiveCrypto.PayloadTooLargeException) error).encrypted;
                     failure = getString(encrypted ? R.string.backup_error_encrypted_too_large
                             : R.string.backup_error_archive_too_large);
+                } else if (error instanceof ArchiveFormat.MetadataLimitException) {
+                    failure = getString(R.string.backup_error_metadata_limit);
                 } else {
                     failure = error instanceof SmsAccess.RestrictedException
                             ? getString(R.string.error_sms_restricted) : getString(R.string.error_generic);

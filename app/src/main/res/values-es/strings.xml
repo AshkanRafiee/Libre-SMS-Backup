@@ -93,6 +93,12 @@
     <string name="permission_denied">Permiso no concedido. No se leyó ni cambió nada.</string>
     <string name="backup_choose_content">Elige primero los SMS o registros de llamadas que quieres guardar.</string>
     <string name="notice_backup_complete_title">Copia de seguridad completada</string>
+    <string name="backup_saved_with_omissions">Copia guardada sin algunos archivos adjuntos</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="one">Se omitió %d archivo adjunto porque era demasiado grande o no se pudo leer.</item>
+        <item quantity="other">Se omitieron %d archivos adjuntos porque eran demasiado grandes o no se pudieron leer.</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">Un registro contiene demasiados datos para guardarlo de forma segura. No se guardó una copia nueva. Si necesitas el historial de llamadas, prueba a copiarlo por separado.</string>
     <string name="notice_restore_complete_title">Restauración completada</string>
     <string name="notice_failed_title">Operación fallida</string>
     <string name="backup_summary">Se guardaron %1$d SMS y %2$d registros de llamadas.</string>

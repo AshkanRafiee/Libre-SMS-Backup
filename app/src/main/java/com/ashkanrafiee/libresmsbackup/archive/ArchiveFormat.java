@@ -65,6 +65,7 @@ public final class ArchiveFormat {
         int calls = 0;
         int mms = 0;
         int rcs = 0;
+        AttachmentCounts attachments = new AttachmentCounts();
         try {
             try (OutputStream raw = new BufferedOutputStream(new FileOutputStream(temp));
                  AttachmentJsonOutput payload = new AttachmentJsonOutput(new OutputStreamWriter(
@@ -102,14 +103,14 @@ public final class ArchiveFormat {
                 }
                 json.endArray();
                 json.name("mms");
-                mms = writeMmsSection(context, json, payload, includeSms);
+                mms = writeMmsSection(context, json, payload, includeSms, attachments);
                 json.name("rcs");
-                rcs = writeRcsSection(context, json, payload, includeSms);
+                rcs = writeRcsSection(context, json, payload, includeSms, attachments);
                 json.endObject();
                 // Closing JsonWriter also finalizes the encrypted payload.
             }
             copyFileToUri(context, temp, destination);
-            return new BackupSummary(sms, calls, mms, rcs);
+            return new BackupSummary(sms, calls, mms, rcs, attachments.omitted);
         } finally {
             if (password != null) Arrays.fill(password, '\0');
             // A failed operation leaves no usable archive at the app's cache location.
@@ -204,7 +205,7 @@ public final class ArchiveFormat {
         for (String providerColumn : cursor.getColumnNames()) {
             String column = RestoreEngine.normalizedColumnName(providerColumn);
             if (column == null || isNonPortableColumn(column) || !exported.add(column)) continue;
-            if (++fields > MAX_OBJECT_FIELDS) throw new IOException("backup object has too many fields");
+            if (++fields > MAX_OBJECT_FIELDS) throw new MetadataLimitException("backup object has too many fields");
             int fieldBytes = jsonStringBytes(column) + (fields == 1 ? 1 : 2); // Colon and comma.
             json.name(column);
             int index = cursor.getColumnIndex(providerColumn);
@@ -244,7 +245,7 @@ public final class ArchiveFormat {
             rowBytes += fieldBytes;
             if (metadata != null) metadata.add(fieldBytes);
             if (rowBytes > MAX_RECORD_METADATA_BYTES)
-                throw new IOException("backup row is too large");
+                throw new MetadataLimitException("backup row is too large");
         }
         json.endObject();
     }
@@ -252,7 +253,7 @@ public final class ArchiveFormat {
     // Counts compact Android JsonWriter output in UTF-8 without allocating an escaped copy.
     private static int jsonStringBytes(String value) throws IOException {
         if (value == null) return 4; // null
-        if (value.length() >= MAX_TOKEN_BYTES) throw new IOException("backup metadata value is too large");
+        if (value.length() >= MAX_TOKEN_BYTES) throw new MetadataLimitException("backup metadata value is too large");
         int bytes = 0;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
@@ -278,7 +279,7 @@ public final class ArchiveFormat {
 
     private static int checkedStringBytes(long contentBytes) throws IOException {
         // AttachmentJsonInput counts the closing quote as part of the token.
-        if (contentBytes >= MAX_TOKEN_BYTES) throw new IOException("backup metadata value is too large");
+        if (contentBytes >= MAX_TOKEN_BYTES) throw new MetadataLimitException("backup metadata value is too large");
         return (int) contentBytes + 2;
     }
 
@@ -290,7 +291,7 @@ public final class ArchiveFormat {
     }
 
     private static int writeMmsSection(Context context, JsonWriter json, AttachmentJsonOutput payload,
-            boolean enabled) throws IOException {
+            boolean enabled, AttachmentCounts attachments) throws IOException {
         json.beginObject();
         json.name("status");
         if (!enabled) {
@@ -323,7 +324,7 @@ public final class ArchiveFormat {
                     json.name("dateMs").value(dateMs);
                 }
                 json.name("parts").beginArray();
-                writeMmsParts(context, json, payload, ref, metadata);
+                writeMmsParts(context, json, payload, ref, metadata, attachments);
                 json.endArray();
                 json.name("addresses").beginArray();
                 writeMmsAddresses(context, json, ref, metadata);
@@ -407,7 +408,7 @@ public final class ArchiveFormat {
     }
 
     private static void writeMmsParts(Context context, JsonWriter json, AttachmentJsonOutput payload,
-            String ref, MmsMetadata metadata)
+            String ref, MmsMetadata metadata, AttachmentCounts attachments)
             throws IOException {
         Uri uri = Uri.parse("content://mms/" + ref + "/part");
         try (Cursor cursor = context.getContentResolver().query(uri, null, null, null, "seq ASC")) {
@@ -418,15 +419,29 @@ public final class ArchiveFormat {
                 json.name("messageRef").value(ref);
                 json.name("row"); writeCursorRow(json, cursor, metadata);
                 int id = cursor.getColumnIndex("_id");
-                if (id >= 0 && !cursor.isNull(id)) {
-                    writeProviderData(context, json, payload,
-                            Uri.parse("content://mms/part/" + cursor.getLong(id)), metadata);
+                int type = cursor.getColumnIndex("ct");
+                String contentType = type < 0 ? null : cursor.getString(type);
+                boolean saved = id >= 0 && !cursor.isNull(id) && writeProviderData(context, json, payload,
+                        Uri.parse("content://mms/part/" + cursor.getLong(id)), metadata);
+                if (!saved && (!storesMmsPartInline(contentType) || hasExternalMmsData(cursor))) {
+                    attachments.omitted++;
                 }
                 json.endObject();
             }
         } catch (SecurityException | IllegalArgumentException e) {
             throw new IOException("MMS parts cannot be read", e);
         }
+    }
+
+    public static boolean storesMmsPartInline(String contentType) {
+        return "text/plain".equals(contentType) || "application/smil".equals(contentType);
+    }
+
+    private static boolean hasExternalMmsData(Cursor cursor) {
+        int path = cursor.getColumnIndex("_data");
+        if (path < 0 || cursor.isNull(path)) return false;
+        String location = cursor.getString(path);
+        return location != null && !location.isEmpty();
     }
 
     private static void writeMmsAddresses(Context context, JsonWriter json, String ref, MmsMetadata metadata)
@@ -456,7 +471,7 @@ public final class ArchiveFormat {
         }
 
         void add(int count) throws IOException {
-            if (!tryAdd(count)) throw new IOException("MMS metadata is too large");
+            if (!tryAdd(count)) throw new MetadataLimitException("MMS metadata is too large");
         }
 
         boolean tryAdd(int count) {
@@ -466,21 +481,21 @@ public final class ArchiveFormat {
         }
 
         void addChild(String ref) throws IOException {
-            if (++children > MAX_MMS_CHILDREN) throw new IOException("MMS has too many parts or addresses");
+            if (++children > MAX_MMS_CHILDREN) throw new MetadataLimitException("MMS has too many parts or addresses");
             // Include a separator even for the first child of each array.
             add(",{\"messageRef\":\"\",\"row\":}".length() + ref.length());
         }
     }
 
-    private static void writeProviderData(Context context, JsonWriter json, AttachmentJsonOutput payload,
+    private static boolean writeProviderData(Context context, JsonWriter json, AttachmentJsonOutput payload,
             Uri uri, MmsMetadata metadata) throws IOException {
         InputStream source;
         try {
             source = context.getContentResolver().openInputStream(uri);
         } catch (IOException | SecurityException | IllegalArgumentException unavailable) {
-            return;
+            return false;
         }
-        if (source == null) return;
+        if (source == null) return false;
         File stage = null;
         boolean sourceClosed = false;
         try {
@@ -492,11 +507,12 @@ public final class ArchiveFormat {
                     complete = stageProviderData(source, output);
                 }
                 sourceClosed = true;
-                try { source.close(); } catch (IOException unavailable) { return; }
-                if (!complete) return;
+                try { source.close(); } catch (IOException unavailable) { return false; }
+                if (!complete) return false;
                 // The reader substitutes offset:length (at most two 19-digit numbers and a colon).
                 if (metadata != null) metadata.add(",\"dataBase64\":\"\"".length() + 2 * 19 + 1);
                 payload.writeAttachment(json, staged);
+                return true;
             }
         } finally {
             if (!sourceClosed) try { source.close(); } catch (IOException ignored) { }
@@ -526,7 +542,7 @@ public final class ArchiveFormat {
     }
 
     private static int writeRcsSection(Context context, JsonWriter json, AttachmentJsonOutput payload,
-            boolean enabled) throws IOException {
+            boolean enabled, AttachmentCounts attachments) throws IOException {
         json.beginObject();
         if (!enabled) {
             json.name("status").value("not_selected");
@@ -555,9 +571,9 @@ public final class ArchiveFormat {
                     json.beginObject();
                     json.name("row"); writeCursorRow(json, files, null);
                     int id = files.getColumnIndex("_id");
-                    if (id >= 0 && !files.isNull(id)) {
-                            writeProviderData(context, json, payload,
-                                    Uri.parse("content://im/ft/" + files.getLong(id)), null);
+                    if (id < 0 || files.isNull(id) || !writeProviderData(context, json, payload,
+                            Uri.parse("content://im/ft/" + files.getLong(id)), null)) {
+                        attachments.omitted++;
                     }
                     json.endObject();
                 }
@@ -605,11 +621,21 @@ public final class ArchiveFormat {
         public final int callCount;
         public final int mmsCount;
         public final int rcsCount;
-        BackupSummary(int smsCount, int callCount, int mmsCount, int rcsCount) {
+        public final int omittedAttachments;
+        BackupSummary(int smsCount, int callCount, int mmsCount, int rcsCount, int omittedAttachments) {
             this.smsCount = smsCount;
             this.callCount = callCount;
             this.mmsCount = mmsCount;
             this.rcsCount = rcsCount;
+            this.omittedAttachments = omittedAttachments;
         }
+    }
+
+    private static final class AttachmentCounts {
+        int omitted;
+    }
+
+    public static final class MetadataLimitException extends IOException {
+        MetadataLimitException(String message) { super(message); }
     }
 }

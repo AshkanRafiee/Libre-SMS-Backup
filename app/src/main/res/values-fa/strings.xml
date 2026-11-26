@@ -93,6 +93,12 @@
     <string name="permission_denied">مجوز داده نشد. چیزی خوانده یا تغییر داده نشد.</string>
     <string name="backup_choose_content">ابتدا پیامک‌ها یا گزارش تماس‌ها را برای پشتیبان‌گیری انتخاب کنید.</string>
     <string name="notice_backup_complete_title">پشتیبان‌گیری کامل شد</string>
+    <string name="backup_saved_with_omissions">پشتیبان بدون برخی پیوست‌ها ذخیره شد</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="one">%d پیوست به دلیل حجم زیاد یا خوانده نشدن، در پشتیبان ذخیره نشد.</item>
+        <item quantity="other">%d پیوست به دلیل حجم زیاد یا خوانده نشدن، در پشتیبان ذخیره نشدند.</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">اطلاعات یکی از موارد برای پشتیبان‌گیری ایمن بیش از حد زیاد است. پشتیبان جدیدی ذخیره نشد. اگر به سابقهٔ تماس‌ها نیاز دارید، جداگانه از تماس‌ها پشتیبان بگیرید.</string>
     <string name="notice_restore_complete_title">بازگردانی کامل شد</string>
     <string name="notice_failed_title">عملیات ناموفق بود</string>
     <string name="backup_summary">%1$d پیامک و %2$d گزارش تماس ذخیره شد.</string>

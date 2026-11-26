@@ -93,6 +93,12 @@
     <string name="permission_denied">Autorisation refusée. Rien n’a été lu ni modifié.</string>
     <string name="backup_choose_content">Sélectionnez d’abord les SMS ou les journaux d’appels à sauvegarder.</string>
     <string name="notice_backup_complete_title">Sauvegarde terminée</string>
+    <string name="backup_saved_with_omissions">Sauvegarde enregistrée sans certaines pièces jointes</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="one">%d pièce jointe a été omise car elle était trop volumineuse ou illisible.</item>
+        <item quantity="other">%d pièces jointes ont été omises car elles étaient trop volumineuses ou illisibles.</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">Un élément contient trop de données pour être sauvegardé en toute sécurité. Aucune nouvelle sauvegarde n’a été enregistrée. Si nécessaire, essayez de sauvegarder séparément le journal des appels.</string>
     <string name="notice_restore_complete_title">Restauration terminée</string>
     <string name="notice_failed_title">Échec de l’opération</string>
     <string name="backup_summary">%1$d SMS et %2$d journaux d’appels enregistrés.</string>

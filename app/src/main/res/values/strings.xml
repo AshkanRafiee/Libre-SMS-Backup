@@ -131,6 +131,13 @@
     <string name="error_sms_restricted">Android restricts encrypted or otherwise restricted messages for non-default SMS apps. Make this app the default SMS app temporarily to include them.</string>
     <string name="backup_choose_content">Select SMS messages or call logs to include first.</string>
     <string name="notice_backup_complete_title">Backup complete</string>
+    <string name="backup_saved_with_omissions">Backup saved without some attachments</string>
+    <string name="backup_summary_with_warning" translatable="false">%1$s\n%2$s</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="one">%d attachment was too large or could not be read and was left out.</item>
+        <item quantity="other">%d attachments were too large or could not be read and were left out.</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">One record has too much data to back up safely. No new backup was saved. If you need your call history, try backing up calls separately.</string>
     <string name="notice_restore_complete_title">Restore complete</string>
     <string name="notice_failed_title">Operation failed</string>
     <string name="backup_summary">Saved %1$d SMS messages and %2$d call records.</string>

@@ -9,7 +9,13 @@ final class BackupSummaryFormatter {
     private BackupSummaryFormatter() {}
 
     static String format(Context context, ArchiveFormat.BackupSummary summary) {
-        return format(context, summary.smsCount, summary.callCount, summary.mmsCount, summary.rcsCount);
+        String counts = format(context, summary.smsCount, summary.callCount, summary.mmsCount, summary.rcsCount);
+        return summary.omittedAttachments == 0 ? counts : context.getString(R.string.backup_summary_with_warning,
+                omittedAttachments(context, summary.omittedAttachments), counts);
+    }
+
+    static String omittedAttachments(Context context, int count) {
+        return context.getResources().getQuantityString(R.plurals.backup_omitted_attachments, count, count);
     }
 
     static String format(Context context, int smsCount, int callCount, int mmsCount, int rcsCount) {

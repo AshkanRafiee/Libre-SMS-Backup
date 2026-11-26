@@ -93,6 +93,16 @@
     <string name="permission_denied">لم يُمنح الإذن. لم تتم قراءة أو تغيير أي شيء.</string>
     <string name="backup_choose_content">اختر أولًا رسائل SMS أو سجلات المكالمات لنسخها.</string>
     <string name="notice_backup_complete_title">اكتملت النسخة الاحتياطية</string>
+    <string name="backup_saved_with_omissions">حُفظت النسخة الاحتياطية من دون بعض المرفقات</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="zero">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>
+        <item quantity="one">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>
+        <item quantity="two">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>
+        <item quantity="few">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>
+        <item quantity="many">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>
+        <item quantity="other">عدد المرفقات المستبعدة: %d (بسبب الحجم أو تعذّر القراءة).</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">أحد السجلات يحتوي على بيانات أكثر مما يمكن نسخه احتياطيًا بأمان. لم تُحفظ نسخة جديدة. إذا كنت بحاجة إلى سجل المكالمات، فجرّب نسخه احتياطيًا على حدة.</string>
     <string name="notice_restore_complete_title">اكتملت الاستعادة</string>
     <string name="notice_failed_title">فشلت العملية</string>
     <string name="backup_summary">تم حفظ %1$d رسالة و%2$d سجل مكالمات.</string>

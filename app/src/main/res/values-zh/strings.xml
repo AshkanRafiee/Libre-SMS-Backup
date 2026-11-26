@@ -97,6 +97,11 @@
     <string name="permission_denied">未授予权限。没有读取或更改任何内容。</string>
     <string name="backup_choose_content">请先选择要备份的短信或通话记录。</string>
     <string name="notice_backup_complete_title">备份完成</string>
+    <string name="backup_saved_with_omissions">备份已保存，但缺少部分附件</string>
+    <plurals name="backup_omitted_attachments">
+        <item quantity="other">%d 个附件因过大或无法读取而未包含在备份中。</item>
+    </plurals>
+    <string name="backup_error_metadata_limit">有一条记录的数据过多，无法安全备份。未保存新备份。如需保留通话记录，请尝试单独备份。</string>
     <string name="notice_restore_complete_title">恢复完成</string>
     <string name="notice_failed_title">操作失败</string>
     <string name="backup_summary">已保存 %1$d 条短信和 %2$d 条通话记录。</string>
