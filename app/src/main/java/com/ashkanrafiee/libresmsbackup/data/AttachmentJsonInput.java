@@ -26,6 +26,7 @@ final class AttachmentJsonInput extends InputStream {
     private final byte[] buffer = new byte[8192];
     private final ArrayDeque<Scope> scopes = new ArrayDeque<>();
     private final int[] fieldsAtDepth = new int[MAX_DEPTH];
+    private final boolean[] mmsRowAtDepth = new boolean[MAX_DEPTH];
     private int position;
     private int size;
     private long offset;
@@ -120,8 +121,13 @@ final class AttachmentJsonInput extends InputStream {
         }
 
         if (value == ':') {
-            if (!scopes.isEmpty() && ++fieldsAtDepth[scopes.size() - 1] > MAX_OBJECT_FIELDS)
+            int depth = scopes.size() - 1;
+            if (depth >= 0 && ++fieldsAtDepth[depth] > MAX_OBJECT_FIELDS)
                 throw new IOException("backup object has too many fields");
+            if (pendingColon && (scope == Scope.MESSAGE || scope == Scope.PART) && matchesName("row")) {
+                if (mmsRowAtDepth[depth]) throw new IOException("duplicate MMS row");
+                mmsRowAtDepth[depth] = true;
+            }
             tokenBytes = 0;
             pendingValue = pendingColon;
         } else {
@@ -129,6 +135,7 @@ final class AttachmentJsonInput extends InputStream {
                 tokenBytes = 0;
                 if (scopes.size() >= MAX_DEPTH) throw new IOException("backup payload is nested too deeply");
                 fieldsAtDepth[scopes.size()] = 0;
+                mmsRowAtDepth[scopes.size()] = false;
                 Scope child = childScope(scope, value);
                 scopes.push(child);
                 if (child == Scope.MESSAGE) {

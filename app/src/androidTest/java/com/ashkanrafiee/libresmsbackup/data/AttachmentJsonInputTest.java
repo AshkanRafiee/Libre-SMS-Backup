@@ -68,6 +68,8 @@ public class AttachmentJsonInputTest extends TestCase {
         for (int level = 0; level < 129; level++) deep.append('[');
         for (String invalid : new String[]{
                 "{\"mms\":{\"messages\":[{\"parts\":[{\"dataBase64\":[0,1]}]}]}}",
+                "{\"mms\":{\"messages\":[{\"row\":{},\"\\u0072ow\":{}}]}}",
+                "{\"mms\":{\"messages\":[{\"parts\":[{\"row\":{},\"row\":{}}]}]}}",
                 deep.toString(), excessiveFields.toString()}) {
             try {
                 transform(invalid.getBytes(StandardCharsets.UTF_8));
